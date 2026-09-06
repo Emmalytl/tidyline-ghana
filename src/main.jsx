@@ -127,7 +127,7 @@ function Home() {
               alt="Black cleaning professional cleaning a home"
             />
             <div className="rating">
-              <Star fill="currentColor" /> <b>4.9</b> customer rating
+              <Star fill="currentColor" /> <b>4.6</b> customer rating
             </div>
             <div className="price">
               <small>Starting from</small>
