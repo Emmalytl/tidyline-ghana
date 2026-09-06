@@ -4,3 +4,11 @@
   border-radius: 12px;
   object-fit: cover;
 }
+
+#areas .areas span:last-child {
+  display: none;
+}
+
+.form select option[value="Kasoa"] {
+  display: none;
+}
