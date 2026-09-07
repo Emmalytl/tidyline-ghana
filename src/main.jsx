@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import Admin from "./pages/Admin";
+import Staff from "./pages/Staff";
 import "./styles/app.css";
 import "./styles/logo.css";
 const WA = import.meta.env.VITE_WHATSAPP_NUMBER || "233XXXXXXXXX";
@@ -482,20 +483,23 @@ function LegacyAdmin() {
   );
 }
 function App() {
+  const location = window.location.pathname;
+  const operations = location === "/admin" || location === "/staff";
   return (
     <>
-      <Header />
+      {!operations && <Header />}
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/book" element={<Book />} />
         <Route path="/check" element={<Check />} />
         <Route path="/admin" element={<Admin />} />
+        <Route path="/staff" element={<Staff />} />
       </Routes>
-      <footer>
+      {!operations && <footer>
         <b>Tidyline Ghana</b>
         <p>Professional cleaning made simple.</p>
         <small>© {new Date().getFullYear()} Tidyline Ghana</small>
-      </footer>
+      </footer>}
     </>
   );
 }
