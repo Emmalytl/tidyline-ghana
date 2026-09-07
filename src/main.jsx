@@ -401,16 +401,21 @@ function Check() {
       setE("Connect Supabase first.");
       return;
     }
-    const { data, error } = await supabase
-      .from("bookings")
-      .select(
-        "booking_ref,name,service_type,date,start_time,status,payment_status,total_fee",
-      )
-      .eq("booking_ref", ref.trim())
-      .eq("email", email.trim())
-      .maybeSingle();
-    if (error || !data) setE("Booking not found.");
-    else setR(data);
+
+    const payload = {
+      p_ref: ref.trim(),
+      p_email: email.trim(),
+    };
+
+    const { data, error } = await supabase.rpc("check_booking", payload);
+
+    if (error || !data || data.length === 0) {
+      setE("Booking not found.");
+      return;
+    }
+
+    const booking = Array.isArray(data) ? data[0] : data;
+    setR(booking);
   }
   return (
     <section className="page">
