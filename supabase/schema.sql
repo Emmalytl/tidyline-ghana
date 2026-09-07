@@ -1,5 +1,136 @@
+-- ============================================================
+-- Tidyline Ghana — complete, consolidated schema
+-- Safe to run on a fresh project OR your current one — every
+-- statement either creates something new or safely skips it if
+-- it already exists. Replaces schema.sql + schema-admin.sql.
+-- ============================================================
+
 create extension if not exists pgcrypto;
-create table if not exists public.bookings(id uuid primary key default gen_random_uuid(),booking_ref text unique not null,name text not null,phone text not null,email text,area text not null,address text not null,service_type text not null,service_fee numeric(12,2) not null default 0,transport_fee numeric(12,2) not null default 0,total_fee numeric(12,2) not null default 0,date date not null,start_time time not null,status text not null default 'Pending',payment_status text not null default 'Unpaid',created_at timestamptz not null default now());
+
+-- ---------------------------------------------------------------------------
+-- Bookings — column names match main.jsx's Book()/Check() exactly
+-- ---------------------------------------------------------------------------
+create table if not exists public.bookings (
+  id uuid primary key default gen_random_uuid(),
+  booking_ref text unique not null,
+  name text not null,
+  phone text not null,
+  email text,
+  area text not null,
+  address text not null,
+  service_type text not null,
+  service_fee numeric(12,2) not null default 0,
+  transport_fee numeric(12,2) not null default 0,
+  total_fee numeric(12,2) not null default 0,
+  date date not null,
+  start_time time not null,
+  status text not null default 'Pending',
+  payment_status text not null default 'Unpaid',
+  created_at timestamptz not null default now()
+);
+
+alter table public.bookings add column if not exists staff_id uuid;
+
 alter table public.bookings enable row level security;
-drop policy if exists "public can create bookings" on public.bookings; create policy "public can create bookings" on public.bookings for insert to anon,authenticated with check(true);
-create table if not exists public.settings(id integer primary key default 1,company_name text default 'Tidyline Ghana',currency text default 'GHS',whatsapp_number text default '233240639070',price_regular numeric(12,2) default 350,price_deep numeric(12,2) default 550,price_moveinout numeric(12,2) default 650,price_office numeric(12,2) default 500,price_post_construction numeric(12,2) default 800);insert into public.settings(id) values(1) on conflict(id) do nothing;
+
+drop policy if exists "public can create bookings" on public.bookings;
+create policy "public can create bookings"
+  on public.bookings for insert
+  to anon, authenticated
+  with check (true);
+
+-- Admins (signed in) get full read/write. The public never gets direct
+-- SELECT — booking lookup goes through check_booking() below instead.
+drop policy if exists "bookings_admin_all" on public.bookings;
+create policy "bookings_admin_all"
+  on public.bookings for all
+  to authenticated
+  using (true)
+  with check (true);
+
+-- ---------------------------------------------------------------------------
+-- check_booking() — safe public lookup by reference + email, matching
+-- exactly what Check() selects: booking_ref, name, service_type, date,
+-- start_time, status, payment_status, total_fee
+-- ---------------------------------------------------------------------------
+create or replace function public.check_booking(p_ref text, p_email text)
+returns table (
+  booking_ref text, name text, service_type text, date date,
+  start_time time, status text, payment_status text, total_fee numeric
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select booking_ref, name, service_type, date, start_time, status, payment_status, total_fee
+  from public.bookings
+  where booking_ref = p_ref and email = p_email
+  limit 1;
+$$;
+
+grant execute on function public.check_booking(text, text) to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Settings — matches Admin.jsx's SettingsTab fields exactly
+-- ---------------------------------------------------------------------------
+create table if not exists public.settings (
+  id integer primary key default 1,
+  company_name text default 'Tidyline Ghana',
+  currency text default 'GHS',
+  whatsapp_number text default '233240639070',
+  price_regular numeric(12,2) default 350,
+  price_deep numeric(12,2) default 550,
+  price_moveinout numeric(12,2) default 650,
+  price_office numeric(12,2) default 500,
+  price_post_construction numeric(12,2) default 800
+);
+
+insert into public.settings (id) values (1) on conflict (id) do nothing;
+
+alter table public.settings enable row level security;
+
+drop policy if exists "settings_public_read" on public.settings;
+create policy "settings_public_read"
+  on public.settings for select
+  to anon, authenticated
+  using (true);
+
+drop policy if exists "settings_admin_write" on public.settings;
+create policy "settings_admin_write"
+  on public.settings for update
+  to authenticated
+  using (true)
+  with check (true);
+
+-- ---------------------------------------------------------------------------
+-- Staff — matches Admin.jsx's StaffTab fields exactly
+-- ---------------------------------------------------------------------------
+create table if not exists public.staff (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  phone text,
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+alter table public.staff enable row level security;
+
+drop policy if exists "staff_admin_all" on public.staff;
+create policy "staff_admin_all"
+  on public.staff for all
+  to authenticated
+  using (true)
+  with check (true);
+
+-- Link bookings.staff_id -> staff.id, only if not already linked
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.table_constraints
+    where table_name = 'bookings' and constraint_name = 'bookings_staff_id_fkey'
+  ) then
+    alter table public.bookings
+      add constraint bookings_staff_id_fkey
+      foreign key (staff_id) references public.staff(id) on delete set null;
+  end if;
+end $$;
