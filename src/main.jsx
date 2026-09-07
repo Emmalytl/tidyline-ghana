@@ -271,11 +271,12 @@ function Book() {
       return;
     }
     const ref = "TDL-" + Date.now().toString().slice(-8);
-    const { service, ...booking } = f;
+    const { service, time, ...booking } = f;
     const { error } = await supabase.from("bookings").insert({
       ...booking,
       booking_ref: ref,
       service_type: service,
+      start_time: time,
       service_fee: price,
       total_fee: price,
       status: "Pending",
