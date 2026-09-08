@@ -25,7 +25,7 @@ function StaffLogin(){
   const [email,setEmail]=useState(""),[password,setPassword]=useState(""),[busy,setBusy]=useState(false),[error,setError]=useState("");
   async function submit(e){e.preventDefault();setBusy(true);setError("");const {error}=await supabase.auth.signInWithPassword({email:email.trim(),password});if(error)setError(error.message);setBusy(false);}
   return <div className="ops-auth"><div className="ops-auth-card">
-    <div className="ops-brand"><div className="ops-logo">T</div><div><strong>Tidyline</strong><span>Staff Portal</span></div></div>
+    <div className="ops-brand"><img className="ops-brand-logo" src="/Tidyline.png" alt="Tidyline" /><div><strong>Tidyline</strong><span>Staff Portal</span></div></div>
     <div className="ops-auth-heading"><span className="ops-kicker">Team access</span><h1>Staff sign in</h1><p>Use the staff email and password created by your Tidyline administrator.</p></div>
     <form className="ops-auth-form" onSubmit={submit}>{error&&<div className="ops-alert danger"><XCircle/>{error}</div>}
       <label>Email<input type="email" required autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="your@email.com"/></label>
@@ -36,8 +36,17 @@ function StaffLogin(){
   </div></div>;
 }
 
+function payrollFor(staff){
+  const basic=Number(staff?.basic_salary ?? 2000), allowance=Number(staff?.monthly_allowance ?? 0), bonus=Number(staff?.monthly_bonus ?? 0);
+  const gross=basic+allowance+bonus, ssnit=basic*0.055, chargeable=Math.max(0,gross-ssnit);
+  let rem=chargeable,paye=0;
+  for(const [band,rate] of [[490,0],[110,.05],[130,.10],[3166.67,.175],[16000,.25],[30520,.30],[Infinity,.35]]){const taxable=Math.min(rem,band); if(taxable<=0) break; paye+=taxable*rate; rem-=taxable;}
+  return {basic,allowance,bonus,gross,ssnit,paye,net:gross-ssnit-paye,employer:basic*.13};
+}
+
 function StaffDashboard({session}){
   const [me,setMe]=useState(null),[bookings,setBookings]=useState([]),[loading,setLoading]=useState(true),[toast,setToast]=useState(""),[error,setError]=useState("");
+  useEffect(()=>{ document.title = "Staff Portal | Tidyline Ghana"; },[]);
   async function load(){
     setLoading(true);setError("");
     const {data:staff,error:sError}=await supabase.from("staff").select("*").eq("auth_user_id",session.user.id).eq("active",true).maybeSingle();
@@ -72,18 +81,19 @@ function StaffDashboard({session}){
 
   return <div className="ops-shell staff-shell">
     <aside className="ops-sidebar">
-      <div className="ops-sidebar-brand"><div className="ops-logo">T</div><div><strong>Tidyline</strong><span>Staff Portal</span></div></div>
+      <div className="ops-sidebar-brand"><img className="ops-brand-logo" src="/Tidyline.png" alt="Tidyline" /><div><strong>Tidyline</strong><span>Staff Portal</span></div></div>
       <div className="ops-nav-title">My work</div>
       <div className="staff-side-person">{me?<><div className="ops-avatar large">{initials(me.name)}</div><strong>{me.name}</strong><span>{me.email || session.user.email}</span><span>{me.active?"Active team member":"Inactive"}</span></>:<><UserCheck/><strong>Loading profile…</strong></>}</div>
       <div className="ops-sidebar-bottom"><a href="/admin" className="ops-staff-link"><CalendarCheck/> Admin login</a><button onClick={signOut}><LogOut/> Sign out</button></div>
     </aside>
     <main className="ops-main">
-      <header className="ops-header"><div className="ops-mobile-title"><span>Tidyline</span></div><div className="ops-header-spacer"/><button className="ops-refresh" onClick={load}><RefreshCw/> Refresh</button><div className="ops-user"><div className="ops-avatar">{initials(me?.name || session.user.email)}</div><div><strong>{me?.name || session.user.email}</strong><span>Staff member</span></div></div></header>
+      <header className="ops-header"><div className="ops-mobile-title"><img src="/Tidyline.png" alt="Tidyline" /><span>Tidyline</span></div><div className="ops-header-spacer"/><button className="ops-refresh" onClick={load}><RefreshCw/> Refresh</button><div className="ops-user"><div className="ops-avatar">{initials(me?.name || session.user.email)}</div><div><strong>{me?.name || session.user.email}</strong><span>Staff member</span></div></div></header>
       <div className="ops-content">
         {error&&<div className="ops-alert danger"><XCircle/>{error}</div>}
         {!error && <div className="ops-page">
           <div className="ops-page-head"><div><span className="ops-kicker">Staff workspace</span><h1>Hi, {me?.name?.split(" ")[0] || "there"}.</h1><p>Only bookings assigned to your staff account are shown here.</p></div></div>
           <div className="ops-stat-grid staff-stats"><Stat icon={CalendarCheck} label="Today's jobs" value={todayJobs.length} detail="Scheduled today"/><Stat icon={Clock3} label="Upcoming" value={upcoming.length} detail="Active scheduled jobs"/><Stat icon={CheckCircle2} label="Completed" value={completed.length} detail="Jobs completed"/></div>
+          {me && <StaffPayCard staff={me}/>}
           <section className="ops-card"><div className="ops-card-head"><div><h2>My jobs</h2><p>Open a job for customer details and status actions.</p></div></div>
             {loading?<div className="ops-loader compact"><div className="spinner"/>Loading jobs…</div>:bookings.length?<div className="staff-jobs">{bookings.map(b=><StaffJob key={b.id} booking={b} onStatus={updateStatus}/>)}</div>:<div className="ops-empty"><CalendarCheck/><strong>No jobs assigned</strong><span>Your assigned bookings will appear here.</span></div>}
           </section>
@@ -92,6 +102,11 @@ function StaffDashboard({session}){
     </main>
     {toast&&<div className="ops-toast"><CheckCircle2/>{toast}</div>}
   </div>;
+}
+
+function StaffPayCard({staff}){
+  const p=payrollFor(staff);
+  return <section className="ops-card staff-pay-card"><div className="ops-card-head"><div><span className="ops-kicker">Monthly payroll</span><h2>Your salary</h2><p>Your current salary, allowances, bonus and statutory deductions.</p></div></div><div className="detail-grid"><div className="detail"><span>Basic salary</span><b>{money(p.basic)}</b></div><div className="detail"><span>Allowances</span><b>{money(p.allowance)}</b></div><div className="detail"><span>Bonus</span><b>{money(p.bonus)}</b></div><div className="detail"><span>Gross pay</span><b>{money(p.gross)}</b></div><div className="detail"><span>Employee SSNIT (5.5%)</span><b>{money(p.ssnit)}</b></div><div className="detail"><span>Income tax / PAYE</span><b>{money(p.paye)}</b></div><div className="detail"><span>Employer contribution (13%)</span><b>{money(p.employer)}</b></div><div className="detail"><span>Take-home pay</span><b className="strong">{money(p.net)}</b></div></div><div className="accounting-note">SSNIT employee deduction is calculated on basic salary only. PAYE is calculated after the employee SSNIT deduction and includes taxable cash allowances/bonuses.</div></section>;
 }
 
 function Stat({icon:Icon,label,value,detail}){return <div className="ops-stat"><div className="ops-stat-icon"><Icon/></div><div><span>{label}</span><strong>{value}</strong><small>{detail}</small></div></div>;}

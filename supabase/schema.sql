@@ -30,6 +30,8 @@ create table if not exists public.bookings (
 );
 
 alter table public.bookings add column if not exists staff_id uuid;
+alter table public.bookings add column if not exists laundry_addon boolean not null default false;
+alter table public.bookings add column if not exists laundry_fee numeric(12,2) not null default 0;
 
 alter table public.bookings enable row level security;
 
@@ -163,6 +165,9 @@ end $$;
 -- ---------------------------------------------------------------------------
 alter table public.staff add column if not exists email text;
 alter table public.staff add column if not exists auth_user_id uuid unique;
+alter table public.staff add column if not exists basic_salary numeric(12,2) not null default 2000;
+alter table public.staff add column if not exists monthly_allowance numeric(12,2) not null default 0;
+alter table public.staff add column if not exists monthly_bonus numeric(12,2) not null default 0;
 
 alter table public.bookings add column if not exists rating_token text;
 alter table public.bookings add column if not exists staff_rating integer;

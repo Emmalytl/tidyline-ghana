@@ -23,3 +23,28 @@
 @media(max-width:800px){.ops-sidebar{position:fixed;left:-270px;width:260px;transition:.22s;box-shadow:20px 0 50px #102f4b20}.ops-sidebar.open{left:0}.ops-overlay{position:fixed;inset:0;background:#102f4b55;border:0;z-index:45}.ops-header{padding:0 16px;height:64px}.ops-mobile-title{display:flex}.ops-header-spacer{display:block}.ops-refresh{padding:9px}.ops-refresh span{display:none}.ops-user>div:last-child{display:none}.ops-content{padding:20px 15px}.ops-loading-bar{left:0;top:63px}.ops-page-head{align-items:flex-start;flex-direction:column}.ops-page-head.compact{align-items:flex-start}.ops-page-head .ops-primary,.ops-page-head .ops-secondary{width:100%}.ops-toolbar{grid-template-columns:1fr 1fr}.ops-search{grid-column:1/-1}.ops-table-head{display:none}.ops-booking-table{background:transparent;border:0;overflow:visible}.ops-table-row{display:grid;grid-template-columns:1fr auto;gap:12px;background:#fff;border:1px solid #e1ebf2;border-radius:14px;margin-bottom:10px;padding:14px}.ops-table-row>div:nth-child(2),.ops-table-row>div:nth-child(3),.ops-table-row>div:nth-child(4),.ops-table-row>div:nth-child(6),.ops-table-row>div:nth-child(7){display:none}.ops-table-row>div:nth-child(5){grid-column:2;grid-row:1}.ops-table-row>div:nth-child(8){grid-column:2;grid-row:1}.client-cell{grid-column:1;grid-row:1}.ops-team-grid{grid-template-columns:1fr}.price-grid{grid-template-columns:1fr 1fr}.staff-picker{display:grid;grid-template-columns:1fr}.staff-picker select{width:100%}}
 @media(max-width:560px){.ops-auth{padding:15px}.ops-auth-card{padding:25px 20px;border-radius:21px}.ops-auth-heading{margin:32px 0 22px}.ops-stat-grid,.staff-stats{grid-template-columns:1fr 1fr;gap:10px}.ops-stat{padding:13px;gap:9px}.ops-stat-icon{width:35px;height:35px}.ops-stat strong{font-size:19px}.ops-stat small{font-size:8px}.ops-page-head h1{font-size:34px}.ops-content{padding:17px 12px}.ops-card{padding:15px;border-radius:15px}.ops-grid-2{gap:12px}.ops-job{grid-template-columns:43px 1fr}.ops-job .job-side{grid-column:2;text-align:left}.ops-toolbar{grid-template-columns:1fr}.ops-search{grid-column:auto}.ops-drawer{padding:18px}.detail-grid{grid-template-columns:1fr 1fr}.form-grid,.price-grid{grid-template-columns:1fr}.staff-contact{flex-wrap:wrap}.staff-contact>div:nth-child(2){min-width:calc(100% - 65px)}.staff-contact a{flex:1;text-align:center}.drawer-actions{position:sticky;bottom:0;background:#fff;padding-bottom:4px}.ops-user{display:none}.ops-page-head{margin-bottom:20px}}
 .completion-note{display:flex;align-items:center;gap:10px;margin-top:12px;padding:12px;border-radius:12px;background:#edf9f2;color:#197a49}.completion-note svg{width:19px}.completion-note strong,.completion-note small{display:block}.completion-note small{font-size:9px;margin-top:3px;color:#5c806e}
+
+/* Tidyline brand + accounting/payroll additions */
+.ops-brand-logo{width:42px;height:42px;border-radius:12px;object-fit:cover;flex:0 0 auto}
+.ops-sidebar-brand,.ops-brand{align-items:center}
+.ops-mobile-title{display:flex;align-items:center;gap:9px}
+.ops-mobile-title img{width:34px;height:34px;border-radius:10px;object-fit:cover}
+.month-picker{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--muted)}
+.month-picker input{padding:9px 11px;background:#fff}
+.accounting-list{display:grid;gap:0}
+.accounting-row{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:13px 0;border-bottom:1px solid var(--line)}
+.accounting-row:last-child{border-bottom:0}
+.accounting-note{margin-top:16px;padding:12px 14px;background:#f5f9fc;border:1px solid var(--line);border-radius:12px;color:var(--muted);font-size:11px;line-height:1.6}
+.payroll-table{overflow-x:auto}
+.payroll-table .ops-table-row,.payroll-table .ops-table-head{min-width:980px}
+.ops-table-row.static{cursor:default}
+.ops-table-row.static:hover{background:#fff}
+.staff-pay-preview{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:11px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-size:11px}
+.staff-pay-preview span{color:var(--muted)}
+.staff-pay-preview b{text-align:right}
+.check-field{display:flex!important;grid-template-columns:auto 1fr!important;align-items:center;gap:10px!important;padding:12px 14px;background:#f5f9fc;border:1px solid var(--line);border-radius:10px}
+.check-field input{width:18px;height:18px;padding:0}
+.check-field span{display:flex;justify-content:space-between;gap:12px}
+.check-field small{color:var(--muted);font-weight:600}
+.staff-pay-card{margin-bottom:18px}
+@media(max-width:700px){.ops-page-head.compact{align-items:flex-start}.month-picker{width:100%;margin-top:10px;justify-content:space-between}.month-picker input{max-width:160px}.accounting-row{align-items:flex-start}.staff-pay-preview{font-size:10px}}

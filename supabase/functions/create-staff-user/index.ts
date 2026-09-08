@@ -45,6 +45,12 @@ Deno.serve(async (req) => {
     const email = String(body.email || "").trim().toLowerCase();
     const password = String(body.password || "");
     const staffId = body.staffId ? String(body.staffId) : null;
+    const basicSalary = Number(body.basicSalary ?? 2000);
+    const allowance = Number(body.allowance ?? 0);
+    const bonus = Number(body.bonus ?? 0);
+    if (![basicSalary, allowance, bonus].every(Number.isFinite) || basicSalary < 0 || allowance < 0 || bonus < 0) {
+      return json({ error: "Salary, allowance and bonus must be valid non-negative numbers." }, 400);
+    }
 
     if (!name || !email || password.length < 6) {
       return json({ error: "Name, email and a password of at least 6 characters are required." }, 400);
@@ -66,8 +72,8 @@ Deno.serve(async (req) => {
     if (createError) return json({ error: createError.message }, 400);
 
     const result = staffId
-      ? await admin.from("staff").update({ name, phone, email, auth_user_id: created.user.id, active: true }).eq("id", staffId).select().single()
-      : await admin.from("staff").insert({ name, phone, email, auth_user_id: created.user.id, active: true }).select().single();
+      ? await admin.from("staff").update({ name, phone, email, auth_user_id: created.user.id, active: true, basic_salary: basicSalary, monthly_allowance: allowance, monthly_bonus: bonus }).eq("id", staffId).select().single()
+      : await admin.from("staff").insert({ name, phone, email, auth_user_id: created.user.id, active: true, basic_salary: basicSalary, monthly_allowance: allowance, monthly_bonus: bonus }).select().single();
 
     if (result.error) {
       await admin.auth.admin.deleteUser(created.user.id);

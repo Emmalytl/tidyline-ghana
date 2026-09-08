@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   BrowserRouter,
@@ -82,6 +82,12 @@ const services = [
     "Detailed cleanup after building or renovation work.",
     800,
     "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=900&q=85",
+  ],
+  [
+    "Laundry",
+    "Laundry washing, drying and folding service.",
+    250,
+    "https://images.unsplash.com/photo-1517677208171-0bc6725a3e60?auto=format&fit=crop&w=900&q=85",
   ],
 ];
 function Home() {
@@ -254,14 +260,17 @@ function Home() {
   );
 }
 function Book() {
+  useEffect(() => { document.title = "Book a Cleaning | Tidyline Ghana"; }, []);
   const [f, setF] = useState({
     name: "", phone: "", email: "", area: "", address: "",
-    service: "Regular Cleaning", date: "", time: "",
+    service: "Regular Cleaning", date: "", time: "", laundry_addon: false,
   });
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [invoice, setInvoice] = useState(null);
-  const price = services.find((x) => x[0] === f.service)?.[2] || 350;
+  const basePrice = services.find((x) => x[0] === f.service)?.[2] || 350;
+  const laundryFee = f.service !== "Laundry" && f.laundry_addon ? 250 : 0;
+  const price = basePrice + laundryFee;
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -283,7 +292,9 @@ function Book() {
       booking_ref: ref,
       service_type: service,
       start_time: time,
-      service_fee: price,
+      service_fee: basePrice,
+      laundry_addon: f.service !== "Laundry" && !!f.laundry_addon,
+      laundry_fee: laundryFee,
       transport_fee: 0,
       total_fee: price,
       status: "Pending",
@@ -336,10 +347,11 @@ function Book() {
           <label>Email<input type="email" required value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></label>
           <label>Area<select required value={f.area} onChange={(e) => setF({ ...f, area: e.target.value })}><option value="">Choose area</option>{["East Legon","Airport","Cantonments","Spintex","Tema","Adenta","Madina","Weija","Other"].map((x) => <option key={x}>{x}</option>)}</select></label>
           <label>Address<textarea required value={f.address} onChange={(e) => setF({ ...f, address: e.target.value })} /></label>
-          <label>Service<select value={f.service} onChange={(e) => setF({ ...f, service: e.target.value })}>{services.map((x) => <option key={x[0]}>{x[0]}</option>)}</select></label>
+          <label>Service<select value={f.service} onChange={(e) => setF({ ...f, service: e.target.value, laundry_addon: false })}>{services.map((x) => <option key={x[0]}>{x[0]}</option>)}</select></label>
+          {f.service !== "Laundry" && <label className="check-field"><input type="checkbox" checked={!!f.laundry_addon} onChange={(e) => setF({ ...f, laundry_addon: e.target.checked })} /><span>Add laundry service <small>GH₵250</small></span></label>}
           <label>Date<input required type="date" min={today} value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></label>
           <label>Start time<input required type="time" value={f.time} onChange={(e) => setF({ ...f, time: e.target.value })} /></label>
-          <div className="estimate">Estimated service fee <b>GH₵{price}</b></div>
+          <div className="estimate"><span>Estimated total</span><b>GH₵{price}</b></div>
           <button className="primary" disabled={busy}>{busy ? "Submitting booking…" : <>Send booking request <ArrowRight /></>}</button>
         </form>
       </div>

@@ -3,7 +3,7 @@ import {
   Activity, AlertCircle, CalendarCheck, CheckCircle2, ChevronDown, Clock3,
   Download, LayoutDashboard, LogOut, Menu, MoreHorizontal, Plus, RefreshCw,
   Search, Settings as SettingsIcon, Trash2, UserCheck, Users, Wallet, X,
-  XCircle
+  XCircle, Calculator, DollarSign
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import "./operations.css";
@@ -12,7 +12,7 @@ const STATUSES = ["Pending", "Confirmed", "Completed", "Cancelled"];
 const PAYMENT_STATUSES = ["Unpaid", "Paid"];
 const SERVICE_TYPES = [
   "Regular Cleaning", "Deep Cleaning", "Move In / Out",
-  "Office Cleaning", "Post-Construction"
+  "Office Cleaning", "Post-Construction", "Laundry"
 ];
 
 function money(value) {
@@ -26,6 +26,16 @@ function initials(name = "") {
 function statusClass(status = "") {
   return `status status-${status.toLowerCase().replace(/[^a-z]+/g, "-")}`;
 }
+async function edgeFunctionErrorMessage(fnError) {
+  if (!fnError) return "Unknown Edge Function error";
+  try {
+    const body = fnError.context && typeof fnError.context.json === "function" ? await fnError.context.json() : null;
+    if (body?.error) return body.error;
+    if (body?.message) return body.message;
+  } catch {}
+  return fnError.message || "Request could not be sent to the Edge Function";
+}
+
 function formatDate(value) {
   if (!value) return "—";
   return new Date(`${value}T00:00:00`).toLocaleDateString("en-GH", {
@@ -77,7 +87,7 @@ function AdminLogin() {
   return (
     <div className="ops-auth">
       <div className="ops-auth-card">
-        <div className="ops-brand"><div className="ops-logo">T</div><div><strong>Tidyline</strong><span>Operations</span></div></div>
+        <div className="ops-brand"><img className="ops-brand-logo" src="/Tidyline.png" alt="Tidyline" /><div><strong>Tidyline</strong><span>Operations</span></div></div>
         <div className="ops-auth-heading"><span className="ops-kicker">Private area</span><h1>Welcome back</h1><p>Sign in to manage bookings, staff, payments and operations.</p></div>
         <form onSubmit={submit} className="ops-auth-form">
           {error && <div className="ops-alert danger"><AlertCircle />{error}</div>}
@@ -115,7 +125,7 @@ function AdminDashboard({ session }) {
     setLoading(false);
   }
 
-  useEffect(() => { loadAll(); }, []);
+  useEffect(() => { document.title = "Admin Dashboard | Tidyline Ghana"; loadAll(); }, []);
 
   function flash(message) {
     setToast(message);
@@ -132,37 +142,42 @@ function AdminDashboard({ session }) {
 
   async function addStaff(payload) {
     if (!payload.email?.trim() || !payload.password) {
-      return flash("Staff email and temporary password are required");
+      flash("Staff email and temporary password are required"); return false;
     }
     const { data, error: fnError } = await supabase.functions.invoke("create-staff-user", {
       body: {
         name: payload.name.trim(),
         phone: payload.phone.trim() || null,
+        basicSalary: Number(payload.basicSalary) || 2000,
+        allowance: Number(payload.allowance) || 0,
+        bonus: Number(payload.bonus) || 0,
         email: payload.email.trim().toLowerCase(),
         password: payload.password
       }
     });
-    if (fnError) return flash(`Error: ${fnError.message}`);
-    if (data?.error) return flash(`Error: ${data.error}`);
+    if (fnError) { flash(`Staff login error: ${await edgeFunctionErrorMessage(fnError)}`); return false; }
+    if (data?.error) { flash(`Staff login error: ${data.error}`); return false; }
+    if (!data?.staff) { flash("Staff login error: the function returned no staff record."); return false; }
     setStaff(prev => [...prev, data.staff]);
-    flash("Staff member and login created");
+    flash("Staff member and login created"); return true;
   }
 
 
   async function createStaffLogin(payload) {
     const { data, error: fnError } = await supabase.functions.invoke("create-staff-user", {
-      body: { staffId: payload.staffId, name: payload.name.trim(), phone: payload.phone.trim() || null, email: payload.email.trim().toLowerCase(), password: payload.password }
+      body: { staffId: payload.staffId, name: payload.name.trim(), phone: payload.phone.trim() || null, basicSalary: Number(payload.basicSalary) || 2000, allowance: Number(payload.allowance) || 0, bonus: Number(payload.bonus) || 0, email: payload.email.trim().toLowerCase(), password: payload.password }
     });
-    if (fnError) return flash(`Error: ${fnError.message}`);
-    if (data?.error) return flash(`Error: ${data.error}`);
+    if (fnError) { flash(`Staff login error: ${await edgeFunctionErrorMessage(fnError)}`); return false; }
+    if (data?.error) { flash(`Staff login error: ${data.error}`); return false; }
+    if (!data?.staff) { flash("Staff login error: the function returned no staff record."); return false; }
     setStaff(prev => prev.map(s => s.id === payload.staffId ? data.staff : s));
-    flash("Staff login created");
+    flash("Staff login created"); return true;
   }
   async function editStaff(id, payload) {
     const { error: updateError } = await supabase.from("staff").update(payload).eq("id", id);
-    if (updateError) return flash(`Error: ${updateError.message}`);
+    if (updateError) { flash(`Error: ${updateError.message}`); return false; }
     setStaff(prev => prev.map(s => s.id === id ? { ...s, ...payload } : s));
-    flash("Staff details saved");
+    flash("Staff details saved"); return true;
   }
 
   async function toggleStaff(id, active) {
@@ -187,10 +202,10 @@ function AdminDashboard({ session }) {
 
   function exportCSV() {
     if (!bookings.length) return flash("There are no bookings to export");
-    const headers = ["Ref","Client","Phone","Email","Area","Address","Service","Date","Time","Staff","Status","Payment","Service Fee","Transport Fee","Total"];
+    const headers = ["Ref","Client","Phone","Email","Area","Address","Service","Date","Time","Staff","Status","Payment","Service Fee","Laundry Fee","Transport Fee","Total"];
     const rows = bookings.map(b => [
       b.booking_ref,b.name,b.phone,b.email || "",b.area,b.address,b.service_type,b.date,b.start_time,
-      staff.find(s => s.id === b.staff_id)?.name || "",b.status,b.payment_status,b.service_fee,b.transport_fee,b.total_fee
+      staff.find(s => s.id === b.staff_id)?.name || "",b.status,b.payment_status,b.service_fee,b.laundry_fee,b.transport_fee,b.total_fee
     ].map(v => `"${String(v ?? "").replaceAll('"','""')}"`).join(","));
     const blob = new Blob([[headers.join(","), ...rows].join("\n")], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob); const a = document.createElement("a");
@@ -202,13 +217,14 @@ function AdminDashboard({ session }) {
     { id: "dashboard", label: "Overview", icon: LayoutDashboard },
     { id: "bookings", label: "Bookings", icon: CalendarCheck, badge: bookings.filter(b => b.status === "Pending").length },
     { id: "staff", label: "Staff", icon: Users },
+    { id: "accounting", label: "Accounting", icon: Calculator },
     { id: "settings", label: "Settings", icon: SettingsIcon }
   ];
 
   return (
     <div className="ops-shell">
       <aside className={`ops-sidebar ${mobileNav ? "open" : ""}`}>
-        <div className="ops-sidebar-brand"><div className="ops-logo">T</div><div><strong>Tidyline</strong><span>Admin</span></div></div>
+        <div className="ops-sidebar-brand"><img className="ops-brand-logo" src="/Tidyline.png" alt="Tidyline" /><div><strong>Tidyline</strong><span>Admin</span></div></div>
         <div className="ops-nav-title">Workspace</div>
         <nav>
           {nav.map(({ id, label, icon: Icon, badge }) => (
@@ -227,7 +243,7 @@ function AdminDashboard({ session }) {
 
       <main className="ops-main">
         <header className="ops-header">
-          <div className="ops-mobile-title"><button className="ops-icon-btn" onClick={() => setMobileNav(true)}><Menu /></button><span>Tidyline</span></div>
+          <div className="ops-mobile-title"><button className="ops-icon-btn" onClick={() => setMobileNav(true)}><Menu /></button><img src="/Tidyline.png" alt="Tidyline" /><span>Tidyline</span></div>
           <div className="ops-header-spacer" />
           <button className="ops-refresh" onClick={loadAll}><RefreshCw /> Refresh</button>
           <div className="ops-user"><div className="ops-avatar">{initials(session.user.email)}</div><div><strong>{session.user.email}</strong><span>Administrator</span></div></div>
@@ -238,6 +254,7 @@ function AdminDashboard({ session }) {
           {tab === "dashboard" && <Overview bookings={bookings} staff={staff} setTab={setTab} />}
           {tab === "bookings" && <Bookings bookings={bookings} staff={staff} onUpdate={updateBooking} onExport={exportCSV} />}
           {tab === "staff" && <StaffManagement staff={staff} onAdd={addStaff} onCreateLogin={createStaffLogin} onEdit={editStaff} onToggle={toggleStaff} onRemove={removeStaff} />}
+          {tab === "accounting" && <Accounting bookings={bookings} staff={staff} />}
           {tab === "settings" && <Settings settings={settings} onSave={saveSettings} />}
           {loading && <div className="ops-loading-bar"><span /></div>}
         </div>
@@ -301,6 +318,57 @@ function JobRow({ booking, staff }) {
 }
 function Empty({ icon: Icon, title, text }) {
   return <div className="ops-empty"><Icon /><strong>{title}</strong><span>{text}</span></div>;
+}
+
+function calculatePayroll(staffMember) {
+  const basic = Number(staffMember?.basic_salary ?? 2000);
+  const allowance = Number(staffMember?.monthly_allowance ?? 0);
+  const bonus = Number(staffMember?.monthly_bonus ?? 0);
+  const gross = basic + allowance + bonus;
+  const employeeSsnit = basic * 0.055;
+  const employerContribution = basic * 0.13;
+  const chargeable = Math.max(0, gross - employeeSsnit);
+  // Ghana resident monthly PAYE bands published by GRA.
+  let remaining = chargeable;
+  let paye = 0;
+  const bands = [[490,0],[110,0.05],[130,0.10],[3166.67,0.175],[16000,0.25],[30520,0.30],[Infinity,0.35]];
+  for (const [band, rate] of bands) { const taxable = Math.min(remaining, band); if (taxable <= 0) break; paye += taxable * rate; remaining -= taxable; }
+  const net = gross - employeeSsnit - paye;
+  return { basic, allowance, bonus, gross, employeeSsnit, employerContribution, paye, net, totalSocial: employeeSsnit + employerContribution };
+}
+
+function Accounting({ bookings, staff }) {
+  const [month, setMonth] = useState(new Date().toISOString().slice(0,7));
+  const activeBookings = bookings.filter(b => b.status !== "Cancelled" && String(b.date || "").startsWith(month));
+  const serviceRevenue = activeBookings.reduce((sum,b)=>sum+Number(b.service_fee||0)+Number(b.laundry_fee||0),0);
+  const laundryRevenue = activeBookings.reduce((sum,b)=>sum+Number(b.laundry_fee||0),0);
+  const transportRevenue = activeBookings.reduce((sum,b)=>sum+Number(b.transport_fee||0),0);
+  const totalRevenue = activeBookings.reduce((sum,b)=>sum+Number(b.total_fee||0),0);
+  const adminFee = serviceRevenue * 0.40;
+  const payroll = staff.filter(s=>s.active).map(s=>({s,p:calculatePayroll(s)}));
+  const employeeSsnit = payroll.reduce((x,r)=>x+r.p.employeeSsnit,0);
+  const employerSsnit = payroll.reduce((x,r)=>x+r.p.employerContribution,0);
+  const paye = payroll.reduce((x,r)=>x+r.p.paye,0);
+  const grossPayroll = payroll.reduce((x,r)=>x+r.p.gross,0);
+  const netPayroll = payroll.reduce((x,r)=>x+r.p.net,0);
+  const totalPayrollCost = grossPayroll + employerSsnit;
+  const businessAfterAdminAndPayroll = totalRevenue - adminFee - totalPayrollCost;
+  const staffRevenue = staff.map(s => ({s, revenue: activeBookings.filter(b=>b.staff_id===s.id).reduce((x,b)=>x+Number(b.service_fee||0)+Number(b.laundry_fee||0),0)}));
+  return <div className="ops-page">
+    <div className="ops-page-head compact"><div><span className="ops-kicker">Finance & payroll</span><h1>Accounting</h1><p>Track service revenue, staff production, payroll, statutory deductions and the 40% administrative fee.</p></div><label className="month-picker">Month<input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></label></div>
+    <div className="ops-stat-grid">
+      <Stat icon={Wallet} label="Total revenue" value={money(totalRevenue)} detail={`${activeBookings.length} non-cancelled bookings`} />
+      <Stat icon={DollarSign} label="Service revenue" value={money(serviceRevenue)} detail="Before admin fee" />
+      <Stat icon={Calculator} label="Admin fee (40%)" value={money(adminFee)} detail="Of exact service amount" />
+      <Stat icon={Users} label="Payroll cost" value={money(totalPayrollCost)} detail="Gross payroll + 13% employer contribution" />
+    </div>
+    <div className="ops-grid-2">
+      <section className="ops-card"><div className="ops-card-head"><div><h2>Staff revenue</h2><p>Service revenue generated by assigned staff.</p></div></div><div className="accounting-list">{staffRevenue.map(({s,revenue})=><div className="accounting-row" key={s.id}><div className="client-cell"><div className="ops-avatar small">{initials(s.name)}</div><div><strong>{s.name}</strong><small>{s.active?"Active":"Inactive"}</small></div></div><strong className="money">{money(revenue)}</strong></div>)}{!staff.length&&<Empty icon={Users} title="No staff" text="Add staff to see production revenue."/>}</div></section>
+      <section className="ops-card"><div className="ops-card-head"><div><h2>Statutory deductions</h2><p>Calculated monthly from each employee's payroll.</p></div></div><div className="health-list"><Health label="Employee SSNIT 5.5%" value={money(employeeSsnit)} total={Math.max(grossPayroll,1)}/><Health label="Employer contribution 13%" value={money(employerSsnit)} total={Math.max(grossPayroll,1)}/><Health label="PAYE / income tax" value={money(paye)} total={Math.max(grossPayroll,1)}/></div><div className="accounting-note">Employee SSNIT is 5.5% of basic salary only. Employer contribution is 13%, making 18.5% total mandatory social security contribution. Cash allowances are included in PAYE chargeable income according to GRA guidance.</div></section>
+    </div>
+    <section className="ops-card"><div className="ops-card-head"><div><h2>Payroll</h2><p>Basic salary, allowances, bonuses, employee deductions and take-home pay.</p></div></div><div className="ops-booking-table payroll-table"><div className="ops-table-head"><span>Staff</span><span>Basic</span><span>Allowances</span><span>Bonus</span><span>SSNIT 5.5%</span><span>PAYE</span><span>Net pay</span></div>{payroll.map(({s,p})=><div className="ops-table-row static" key={s.id}><div className="client-cell"><div className="ops-avatar small">{initials(s.name)}</div><div><strong>{s.name}</strong><small>{s.email||"No login email"}</small></div></div><div>{money(p.basic)}</div><div>{money(p.allowance)}</div><div>{money(p.bonus)}</div><div>{money(p.employeeSsnit)}</div><div>{money(p.paye)}</div><div className="money">{money(p.net)}</div></div>)}{!payroll.length&&<Empty icon={Users} title="No active staff" text="Activate staff to include them in payroll."/>}</div></section>
+    <section className="ops-card"><div className="ops-card-head"><div><h2>Revenue summary</h2><p>Business view for the selected month.</p></div></div><div className="detail-grid"><Detail label="Service revenue" value={money(serviceRevenue)}/><Detail label="Laundry revenue" value={money(laundryRevenue)}/><Detail label="Transport revenue" value={money(transportRevenue)}/><Detail label="Administrative fee (40%)" value={money(adminFee)}/><Detail label="Gross payroll" value={money(grossPayroll)}/><Detail label="Employer contribution" value={money(employerSsnit)}/><Detail label="Net payroll paid" value={money(netPayroll)} strong/><Detail label="After admin fee + payroll" value={money(businessAfterAdminAndPayroll)} strong/></div></section>
+  </div>;
 }
 
 function Bookings({ bookings, staff, onUpdate, onExport }) {
@@ -373,20 +441,21 @@ function StaffManagement({ staff, onAdd, onCreateLogin, onEdit, onToggle, onRemo
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState(null);
   const [name,setName]=useState(""); const [phone,setPhone]=useState("");
-  const [email,setEmail]=useState(""); const [password,setPassword]=useState(""); const [loginOnly,setLoginOnly]=useState(false);
-  function reset(){setName("");setPhone("");setEmail("");setPassword("");setEditing(null);setShowAdd(false);setLoginOnly(false)}
-  function startEdit(s){ setEditing(s.id); setName(s.name); setPhone(s.phone || ""); setEmail(s.email || ""); setPassword(""); setShowAdd(false); setLoginOnly(false); }
-  function startLogin(s){ setEditing(s.id); setName(s.name); setPhone(s.phone || ""); setEmail(s.email || ""); setPassword(""); setShowAdd(false); setLoginOnly(true); }
+  const [email,setEmail]=useState(""); const [password,setPassword]=useState(""); const [basicSalary,setBasicSalary]=useState(2000); const [allowance,setAllowance]=useState(0); const [bonus,setBonus]=useState(0); const [loginOnly,setLoginOnly]=useState(false);
+  function reset(){setName("");setPhone("");setEmail("");setPassword("");setBasicSalary(2000);setAllowance(0);setBonus(0);setEditing(null);setShowAdd(false);setLoginOnly(false)}
+  function startEdit(s){ setEditing(s.id); setName(s.name); setPhone(s.phone || ""); setEmail(s.email || ""); setPassword(""); setBasicSalary(Number(s.basic_salary ?? 2000)); setAllowance(Number(s.monthly_allowance ?? 0)); setBonus(Number(s.monthly_bonus ?? 0)); setShowAdd(false); setLoginOnly(false); }
+  function startLogin(s){ setEditing(s.id); setName(s.name); setPhone(s.phone || ""); setEmail(s.email || ""); setPassword(""); setBasicSalary(Number(s.basic_salary ?? 2000)); setAllowance(Number(s.monthly_allowance ?? 0)); setBonus(Number(s.monthly_bonus ?? 0)); setShowAdd(false); setLoginOnly(true); }
   async function submit(e){
     e.preventDefault();
     if(!name.trim()) return;
-    if(editing && loginOnly) await onCreateLogin({staffId:editing,name,phone,email,password});
-    else if(editing) await onEdit(editing,{name:name.trim(),phone:phone.trim()||null});
-    else await onAdd({name,phone,email,password});
-    reset();
+    let ok = true;
+    if(editing && loginOnly) ok = await onCreateLogin({staffId:editing,name,phone,email,password,basicSalary:Number(basicSalary)||2000,allowance:Number(allowance)||0,bonus:Number(bonus)||0});
+    else if(editing) ok = await onEdit(editing,{name:name.trim(),phone:phone.trim()||null,basic_salary:Number(basicSalary)||2000,monthly_allowance:Number(allowance)||0,monthly_bonus:Number(bonus)||0});
+    else ok = await onAdd({name,phone,email,password,basicSalary:Number(basicSalary)||2000,allowance:Number(allowance)||0,bonus:Number(bonus)||0});
+    if (ok !== false) reset();
   }
   return <div className="ops-page">
-    <div className="ops-page-head compact"><div><span className="ops-kicker">Team management</span><h1>Staff</h1><p>Create staff accounts, manage cleaners and assign them to customer bookings.</p></div><button className="ops-primary" onClick={()=>{setShowAdd(true);setEditing(null);setName("");setPhone("");setEmail("");setPassword("")}}><Plus /> Add staff</button></div>
+    <div className="ops-page-head compact"><div><span className="ops-kicker">Team management</span><h1>Staff</h1><p>Create staff accounts, manage cleaners and assign them to customer bookings.</p></div><button className="ops-primary" onClick={()=>{setShowAdd(true);setEditing(null);setName("");setPhone("");setEmail("");setPassword("");setBasicSalary(2000);setAllowance(0);setBonus(0)}}><Plus /> Add staff</button></div>
     {(showAdd || editing) && <form className="ops-card staff-form" onSubmit={submit}>
       <div><h2>{loginOnly ? "Create staff login" : editing ? "Edit staff member" : "Add staff member"}</h2><p>{loginOnly ? "Link this existing staff member to a Supabase login." : editing ? "Update this cleaner's contact details." : "Create the cleaner's Tidyline login. Give them the temporary password securely."}</p></div>
       <div className="form-grid">
@@ -394,10 +463,13 @@ function StaffManagement({ staff, onAdd, onCreateLogin, onEdit, onToggle, onRemo
         <label>Phone / WhatsApp<input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="024 000 0000"/></label>
         {(!editing || loginOnly) && <label>Email / Login<input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="ama@tidyline.com"/></label>}
         {(!editing || loginOnly) && <label>Temporary password<input required minLength={6} type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="At least 6 characters"/></label>}
+        <label>Basic salary (GH₵)<input type="number" min="0" value={basicSalary} onChange={e=>setBasicSalary(e.target.value)} /></label>
+        <label>Monthly allowance (GH₵)<input type="number" min="0" value={allowance} onChange={e=>setAllowance(e.target.value)} /></label>
+        <label>Monthly bonus (GH₵)<input type="number" min="0" value={bonus} onChange={e=>setBonus(e.target.value)} /></label>
       </div>
       <div className="form-actions"><button type="button" className="ops-secondary" onClick={reset}>Cancel</button><button className="ops-primary">{loginOnly?"Create login":editing?"Save changes":"Create staff login"}</button></div>
     </form>}
-    <div className="ops-team-grid">{staff.map(s=><div className="staff-card" key={s.id}><div className="staff-card-top"><div className="ops-avatar large">{initials(s.name)}</div><span className={`team-state ${s.active?"active":"inactive"}`}>{s.active?"Active":"Inactive"}</span></div><h2>{s.name}</h2><p>{s.email || "Login email not set"}</p><p>{s.phone || "No phone on file"}</p><div className="staff-meta"><span><CalendarCheck /> {s.active ? "Available for assignment" : "Not available"}</span></div><div className="staff-actions"><button className="ops-secondary" onClick={()=>startEdit(s)}>Edit</button>{!s.auth_user_id&&<button className="ops-secondary" onClick={()=>startLogin(s)}>Create login</button>}<button className={`ops-secondary ${s.active?"":"success"}`} onClick={()=>onToggle(s.id,s.active)}>{s.active?"Deactivate":"Activate"}</button><button className="ops-danger-icon" title="Remove staff" onClick={()=>window.confirm(`Remove ${s.name}?`) && onRemove(s.id)}><Trash2 /></button></div></div>)}</div>
+    <div className="ops-team-grid">{staff.map(s=><div className="staff-card" key={s.id}><div className="staff-card-top"><div className="ops-avatar large">{initials(s.name)}</div><span className={`team-state ${s.active?"active":"inactive"}`}>{s.active?"Active":"Inactive"}</span></div><h2>{s.name}</h2><p>{s.email || "Login email not set"}</p><p>{s.phone || "No phone on file"}</p><div className="staff-pay-preview"><span>Basic salary</span><b>{money(s.basic_salary ?? 2000)}</b><span>Allowance + bonus</span><b>{money(Number(s.monthly_allowance||0)+Number(s.monthly_bonus||0))}</b></div><div className="staff-meta"><span><CalendarCheck /> {s.active ? "Available for assignment" : "Not available"}</span></div><div className="staff-actions"><button className="ops-secondary" onClick={()=>startEdit(s)}>Edit</button>{!s.auth_user_id&&<button className="ops-secondary" onClick={()=>startLogin(s)}>Create login</button>}<button className={`ops-secondary ${s.active?"":"success"}`} onClick={()=>onToggle(s.id,s.active)}>{s.active?"Deactivate":"Activate"}</button><button className="ops-danger-icon" title="Remove staff" onClick={()=>window.confirm(`Remove ${s.name}?`) && onRemove(s.id)}><Trash2 /></button></div></div>)}</div>
     {!staff.length && <div className="ops-card"><Empty icon={Users} title="No staff yet" text="Add your first cleaner to start assigning bookings." /></div>}
   </div>;
 }
