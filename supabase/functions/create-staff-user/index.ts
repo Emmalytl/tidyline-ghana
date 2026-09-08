@@ -1,43 +1,82 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Content-Type": "application/json",
+};
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: corsHeaders });
+}
+
 Deno.serve(async (req) => {
-  if (req.method !== "POST") return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers: { "Content-Type": "application/json" } });
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { "Content-Type": "application/json" } });
-  const url = Deno.env.get("SUPABASE_URL")!;
-  const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const caller = createClient(url, service, { global: { headers: { Authorization: authHeader } } });
-  const { data: { user } } = await caller.auth.getUser();
-  if (!user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { "Content-Type": "application/json" } });
+  if (req.method === "OPTIONS") return new Response("ok", { status: 200, headers: corsHeaders });
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
-  const admin = createClient(url, service);
-  const { data: staffCaller } = await admin.from("staff").select("id").eq("auth_user_id", user.id).maybeSingle();
-  if (staffCaller) return new Response(JSON.stringify({ error: "Staff accounts cannot create staff users" }), { status: 403, headers: { "Content-Type": "application/json" } });
+  try {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) return json({ error: "Unauthorized: missing Authorization header" }, 401);
 
-  const body = await req.json();
-  const name = String(body.name || "").trim();
-  const phone = body.phone ? String(body.phone).trim() : null;
-  const email = String(body.email || "").trim().toLowerCase();
-  const password = String(body.password || "");
-  if (!name || !email || password.length < 6) return new Response(JSON.stringify({ error: "Name, email and a password of at least 6 characters are required" }), { status: 400, headers: { "Content-Type": "application/json" } });
+    const url = Deno.env.get("SUPABASE_URL");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!url || !serviceKey) return json({ error: "Server configuration error: Supabase service credentials are missing." }, 500);
 
-  const { data: created, error: createError } = await admin.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { role: "staff", name } });
-  if (createError) return new Response(JSON.stringify({ error: createError.message }), { status: 400, headers: { "Content-Type": "application/json" } });
+    // Verify the caller with the user's access token.
+    const caller = createClient(url, serviceKey, { global: { headers: { Authorization: authHeader } } });
+    const { data: { user }, error: authError } = await caller.auth.getUser();
+    if (authError || !user) return json({ error: "Unauthorized: your admin session is invalid or expired. Please sign in again." }, 401);
 
-  let staff;
-  let staffError;
-  if (body.staffId) {
-    const existing = await admin.from("staff").select("id").eq("id", body.staffId).maybeSingle();
-    if (!existing.data) { await admin.auth.admin.deleteUser(created.user.id); return new Response(JSON.stringify({ error: "Staff member not found" }), { status: 404, headers: { "Content-Type": "application/json" } }); }
-    const result = await admin.from("staff").update({ name, phone, email, auth_user_id: created.user.id, active: true }).eq("id", body.staffId).select().single();
-    staff = result.data; staffError = result.error;
-  } else {
-    const result = await admin.from("staff").insert({ name, phone, email, auth_user_id: created.user.id, active: true }).select().single();
-    staff = result.data; staffError = result.error;
+    const admin = createClient(url, serviceKey);
+    const { data: staffCaller, error: staffCheckError } = await admin
+      .from("staff")
+      .select("id")
+      .eq("auth_user_id", user.id)
+      .maybeSingle();
+    if (staffCheckError) return json({ error: staffCheckError.message }, 500);
+    if (staffCaller) return json({ error: "Staff accounts cannot create staff users." }, 403);
+
+    const body = await req.json().catch(() => null);
+    if (!body) return json({ error: "Invalid JSON request body." }, 400);
+
+    const name = String(body.name || "").trim();
+    const phone = body.phone ? String(body.phone).trim() : null;
+    const email = String(body.email || "").trim().toLowerCase();
+    const password = String(body.password || "");
+    const staffId = body.staffId ? String(body.staffId) : null;
+
+    if (!name || !email || password.length < 6) {
+      return json({ error: "Name, email and a password of at least 6 characters are required." }, 400);
+    }
+
+    if (staffId) {
+      const { data: existing, error: existingError } = await admin.from("staff").select("id, auth_user_id").eq("id", staffId).maybeSingle();
+      if (existingError) return json({ error: existingError.message }, 500);
+      if (!existing) return json({ error: "Staff member not found." }, 404);
+      if (existing.auth_user_id) return json({ error: "This staff member already has a login." }, 409);
+    }
+
+    const { data: created, error: createError } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { role: "staff", name },
+    });
+    if (createError) return json({ error: createError.message }, 400);
+
+    const result = staffId
+      ? await admin.from("staff").update({ name, phone, email, auth_user_id: created.user.id, active: true }).eq("id", staffId).select().single()
+      : await admin.from("staff").insert({ name, phone, email, auth_user_id: created.user.id, active: true }).select().single();
+
+    if (result.error) {
+      await admin.auth.admin.deleteUser(created.user.id);
+      return json({ error: result.error.message }, 400);
+    }
+
+    return json({ staff: result.data }, 200);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unexpected server error";
+    return json({ error: message }, 500);
   }
-  if (staffError) {
-    await admin.auth.admin.deleteUser(created.user.id);
-    return new Response(JSON.stringify({ error: staffError.message }), { status: 400, headers: { "Content-Type": "application/json" } });
-  }
-  return new Response(JSON.stringify({ staff }), { status: 200, headers: { "Content-Type": "application/json" } });
 });

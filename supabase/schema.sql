@@ -33,6 +33,26 @@ alter table public.bookings add column if not exists staff_id uuid;
 
 alter table public.bookings enable row level security;
 
+-- Never allow a new or edited booking to use a date before today.
+-- Ghana uses UTC+0, so CURRENT_DATE matches the business date.
+create or replace function public.prevent_past_booking_date()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if new.date < current_date then
+    raise exception 'Booking date cannot be in the past';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists bookings_prevent_past_date on public.bookings;
+create trigger bookings_prevent_past_date
+before insert or update of date on public.bookings
+for each row execute function public.prevent_past_booking_date();
+
 drop policy if exists "public can create bookings" on public.bookings;
 create policy "public can create bookings"
   on public.bookings for insert

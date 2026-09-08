@@ -263,10 +263,19 @@ function Book() {
   const [invoice, setInvoice] = useState(null);
   const price = services.find((x) => x[0] === f.service)?.[2] || 350;
 
+  const today = new Date().toISOString().slice(0, 10);
+
   async function submit(e) {
     e.preventDefault();
+    setMsg("");
     if (!supabase) { setMsg("Connect your Supabase keys in .env.local first."); return; }
-    setBusy(true); setMsg("");
+    if (!f.date) { setMsg("Please choose a booking date."); return; }
+    if (f.date < today) {
+      setMsg("You cannot book a date that has already passed. Please choose today or a future date.");
+      return;
+    }
+    if (!f.time) { setMsg("Please choose a start time."); return; }
+    setBusy(true);
     const ref = "TDL-" + Date.now().toString().slice(-8);
     const { service, time, ...booking } = f;
     const payload = {
@@ -328,7 +337,7 @@ function Book() {
           <label>Area<select required value={f.area} onChange={(e) => setF({ ...f, area: e.target.value })}><option value="">Choose area</option>{["East Legon","Airport","Cantonments","Spintex","Tema","Adenta","Madina","Weija","Other"].map((x) => <option key={x}>{x}</option>)}</select></label>
           <label>Address<textarea required value={f.address} onChange={(e) => setF({ ...f, address: e.target.value })} /></label>
           <label>Service<select value={f.service} onChange={(e) => setF({ ...f, service: e.target.value })}>{services.map((x) => <option key={x[0]}>{x[0]}</option>)}</select></label>
-          <label>Date<input required type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></label>
+          <label>Date<input required type="date" min={today} value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></label>
           <label>Start time<input required type="time" value={f.time} onChange={(e) => setF({ ...f, time: e.target.value })} /></label>
           <div className="estimate">Estimated service fee <b>GH₵{price}</b></div>
           <button className="primary" disabled={busy}>{busy ? "Submitting booking…" : <>Send booking request <ArrowRight /></>}</button>
