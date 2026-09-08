@@ -18,3 +18,9 @@ The landing page and service cards include Black cleaning professionals and Blac
 
 ## Next expansion
 Admin authentication, complete operations dashboard, clients, staff, availability, transport costs, profit, payroll, reports, invoices, audit trail, secure RLS and WhatsApp schedule generation.
+
+## Latest customer booking updates
+- Successful booking now replaces the booking form with a full booking invoice/confirmation card and a Back to landing page button.
+- Main mobile navigation closes immediately after selecting a section/link.
+- Check booking now presents the returned booking information in a structured details card, including customer, phone, service, area, address, date/time, status, payment, service fee, transport fee and total.
+- The public `check_booking` RPC normalizes reference/email matching and returns the expanded booking details.

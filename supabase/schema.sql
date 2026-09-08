@@ -55,16 +55,20 @@ create policy "bookings_admin_all"
 -- ---------------------------------------------------------------------------
 create or replace function public.check_booking(p_ref text, p_email text)
 returns table (
-  booking_ref text, name text, service_type text, date date,
-  start_time time, status text, payment_status text, total_fee numeric
+  booking_ref text, name text, phone text, email text, area text, address text,
+  service_type text, service_fee numeric, transport_fee numeric, total_fee numeric,
+  date date, start_time time, status text, payment_status text
 )
 language sql
 security definer
 set search_path = public
 as $$
-  select booking_ref, name, service_type, date, start_time, status, payment_status, total_fee
-  from public.bookings
-  where booking_ref = p_ref and email = p_email
+  select b.booking_ref, b.name, b.phone, b.email, b.area, b.address,
+         b.service_type, b.service_fee, b.transport_fee, b.total_fee,
+         b.date, b.start_time, b.status, b.payment_status
+  from public.bookings b
+  where lower(trim(b.booking_ref)) = lower(trim(p_ref))
+    and lower(trim(coalesce(b.email,''))) = lower(trim(coalesce(p_email,'')))
   limit 1;
 $$;
 

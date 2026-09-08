@@ -39,12 +39,12 @@ function Header() {
           {o ? <X /> : <Menu />}
         </button>
         <nav className={o ? "open" : ""}>
-          <a href="/#services">Services</a>
-          <a href="/#why">Why us</a>
-          <a href="/#areas">Areas</a>
-          <a href="/#how">How it works</a>
-          <Link to="/check">Check booking</Link>
-          <Link className="book" to="/book">
+          <a href="/#services" onClick={() => s(false)}>Services</a>
+          <a href="/#why" onClick={() => s(false)}>Why us</a>
+          <a href="/#areas" onClick={() => s(false)}>Areas</a>
+          <a href="/#how" onClick={() => s(false)}>How it works</a>
+          <Link to="/check" onClick={() => s(false)}>Check booking</Link>
+          <Link className="book" to="/book" onClick={() => s(false)}>
             Book now
           </Link>
         </nav>
@@ -255,38 +255,65 @@ function Home() {
 }
 function Book() {
   const [f, setF] = useState({
-      name: "",
-      phone: "",
-      email: "",
-      area: "",
-      address: "",
-      service: "Regular Cleaning",
-      date: "",
-      time: "",
-    }),
-    [msg, setMsg] = useState("");
+    name: "", phone: "", email: "", area: "", address: "",
+    service: "Regular Cleaning", date: "", time: "",
+  });
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [invoice, setInvoice] = useState(null);
   const price = services.find((x) => x[0] === f.service)?.[2] || 350;
+
   async function submit(e) {
     e.preventDefault();
-    if (!supabase) {
-      setMsg("Connect your Supabase keys in .env.local first.");
-      return;
-    }
+    if (!supabase) { setMsg("Connect your Supabase keys in .env.local first."); return; }
+    setBusy(true); setMsg("");
     const ref = "TDL-" + Date.now().toString().slice(-8);
     const { service, time, ...booking } = f;
-    const { error } = await supabase.from("bookings").insert({
+    const payload = {
       ...booking,
       booking_ref: ref,
       service_type: service,
       start_time: time,
       service_fee: price,
+      transport_fee: 0,
       total_fee: price,
       status: "Pending",
       payment_status: "Unpaid",
-    });
-    if (error) setMsg(error.message);
-    else setMsg("Booking received! Your reference is " + ref);
+    };
+    const { data, error } = await supabase.from("bookings").insert(payload).select().single();
+    setBusy(false);
+    if (error) { setMsg(error.message); return; }
+    setInvoice(data || payload);
   }
+
+  if (invoice) {
+    return (
+      <section className="page booking-success-page">
+        <div className="narrow">
+          <div className="invoice-card">
+            <div className="invoice-success"><CheckCircle2 /></div>
+            <span className="eyebrow">Booking received</span>
+            <h1>Your cleaning is booked.</h1>
+            <p className="invoice-ref">Reference <b>{invoice.booking_ref}</b></p>
+            <div className="invoice-grid">
+              <div><span>Customer</span><b>{invoice.name}</b></div>
+              <div><span>Phone / WhatsApp</span><b>{invoice.phone}</b></div>
+              <div><span>Service</span><b>{invoice.service_type}</b></div>
+              <div><span>Area</span><b>{invoice.area}</b></div>
+              <div><span>Date</span><b>{invoice.date}</b></div>
+              <div><span>Start time</span><b>{invoice.start_time?.slice(0,5)}</b></div>
+              <div className="full"><span>Address</span><b>{invoice.address}</b></div>
+            </div>
+            <div className="invoice-total"><span>Total</span><strong>GH₵{Number(invoice.total_fee || 0).toLocaleString()}</strong></div>
+            <div className="invoice-status"><CheckCircle2 /> Request status: <b>Pending confirmation</b></div>
+            <p className="invoice-note">Keep your booking reference. You can use it with your email to check the booking status anytime.</p>
+            <Link className="primary invoice-home" to="/">Back to landing page <ArrowRight /></Link>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="page">
       <div className="narrow">
@@ -295,173 +322,66 @@ function Book() {
         <p>Complete your details and send your request.</p>
         <form className="form" onSubmit={submit}>
           {msg && <div className="notice">{msg}</div>}
-          <label>
-            Name
-            <input
-              required
-              value={f.name}
-              onChange={(e) => setF({ ...f, name: e.target.value })}
-            />
-          </label>
-          <label>
-            Phone / WhatsApp
-            <input
-              required
-              value={f.phone}
-              onChange={(e) => setF({ ...f, phone: e.target.value })}
-            />
-          </label>
-          <label>
-            Email
-            <input
-              type="email"
-              value={f.email}
-              onChange={(e) => setF({ ...f, email: e.target.value })}
-            />
-          </label>
-          <label>
-            Area
-            <select
-              required
-              value={f.area}
-              onChange={(e) => setF({ ...f, area: e.target.value })}
-            >
-              <option value="">Choose area</option>
-              {[
-                "East Legon",
-                "Airport",
-                "Cantonments",
-                "Spintex",
-                "Tema",
-                "Adenta",
-                "Madina",
-                "Weija",
-                "Other",
-              ].map((x) => (
-                <option key={x}>{x}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Address
-            <textarea
-              required
-              value={f.address}
-              onChange={(e) => setF({ ...f, address: e.target.value })}
-            />
-          </label>
-          <label>
-            Service
-            <select
-              value={f.service}
-              onChange={(e) => setF({ ...f, service: e.target.value })}
-            >
-              {services.map((x) => (
-                <option key={x[0]}>{x[0]}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Date
-            <input
-              required
-              type="date"
-              value={f.date}
-              onChange={(e) => setF({ ...f, date: e.target.value })}
-            />
-          </label>
-          <label>
-            Start time
-            <input
-              required
-              type="time"
-              value={f.time}
-              onChange={(e) => setF({ ...f, time: e.target.value })}
-            />
-          </label>
-          <div className="estimate">
-            Estimated service fee <b>GH₵{price}</b>
-          </div>
-          <button className="primary">
-            Send booking request <ArrowRight />
-          </button>
+          <label>Name<input required value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></label>
+          <label>Phone / WhatsApp<input required value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></label>
+          <label>Email<input type="email" required value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></label>
+          <label>Area<select required value={f.area} onChange={(e) => setF({ ...f, area: e.target.value })}><option value="">Choose area</option>{["East Legon","Airport","Cantonments","Spintex","Tema","Adenta","Madina","Weija","Other"].map((x) => <option key={x}>{x}</option>)}</select></label>
+          <label>Address<textarea required value={f.address} onChange={(e) => setF({ ...f, address: e.target.value })} /></label>
+          <label>Service<select value={f.service} onChange={(e) => setF({ ...f, service: e.target.value })}>{services.map((x) => <option key={x[0]}>{x[0]}</option>)}</select></label>
+          <label>Date<input required type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></label>
+          <label>Start time<input required type="time" value={f.time} onChange={(e) => setF({ ...f, time: e.target.value })} /></label>
+          <div className="estimate">Estimated service fee <b>GH₵{price}</b></div>
+          <button className="primary" disabled={busy}>{busy ? "Submitting booking…" : <>Send booking request <ArrowRight /></>}</button>
         </form>
       </div>
     </section>
   );
 }
 function Check() {
-  const [ref, sr] = useState(""),
-    [email, se] = useState(""),
-    [r, setR] = useState(null),
-    [e, setE] = useState("");
+  const [ref, sr] = useState(""), [email, se] = useState(""), [r, setR] = useState(null), [e, setE] = useState(""), [busy, setBusy] = useState(false);
   async function go(x) {
-    x.preventDefault();
-    setE("");
-    setR(null);
-    if (!supabase) {
-      setE("Connect Supabase first.");
-      return;
-    }
-
-    const payload = {
-      p_ref: ref.trim(),
-      p_email: email.trim(),
-    };
-
-    const { data, error } = await supabase.rpc("check_booking", payload);
-
-    if (error || !data || data.length === 0) {
-      setE("Booking not found.");
-      return;
-    }
-
-    const booking = Array.isArray(data) ? data[0] : data;
-    setR(booking);
+    x.preventDefault(); setE(""); setR(null); setBusy(true);
+    if (!supabase) { setE("Connect Supabase first."); setBusy(false); return; }
+    const { data, error } = await supabase.rpc("check_booking", { p_ref: ref.trim(), p_email: email.trim() });
+    setBusy(false);
+    if (error || !data || data.length === 0) { setE(error?.message || "Booking not found. Check the reference and email used when booking."); return; }
+    setR(Array.isArray(data) ? data[0] : data);
   }
   return (
     <section className="page">
       <div className="narrow">
         <Link to="/">← Back home</Link>
         <h1>Check booking.</h1>
+        <p>Enter the booking reference and the email used for the booking.</p>
         <form className="form" onSubmit={go}>
           {e && <div className="notice">{e}</div>}
-          <label>
-            Booking reference
-            <input
-              required
-              value={ref}
-              onChange={(x) => sr(x.target.value)}
-              placeholder="TDL-12345678"
-            />
-          </label>
-          <label>
-            Email
-            <input
-              required
-              type="email"
-              value={email}
-              onChange={(x) => se(x.target.value)}
-            />
-          </label>
-          <button className="primary">Check booking</button>
+          <label>Booking reference<input required value={ref} onChange={(x) => sr(x.target.value)} placeholder="TDL-12345678" /></label>
+          <label>Email<input required type="email" value={email} onChange={(x) => se(x.target.value)} /></label>
+          <button className="primary" disabled={busy}>{busy ? "Checking…" : "Check booking"}</button>
         </form>
-        {r && (
-          <div className="result">
-            <CheckCircle2 />
-            <h2>{r.service_type}</h2>
-            <p>
-              {r.name} · {r.date} · {r.start_time}
-            </p>
-            <b>{r.status}</b>
-            <strong>GH₵{Number(r.total_fee || 0).toLocaleString()}</strong>
-            <small>Payment: {r.payment_status}</small>
+        {r && <div className="result booking-check-result">
+          <div className="result-head"><CheckCircle2/><div><span className="eyebrow">Booking {r.booking_ref}</span><h2>{r.service_type}</h2></div></div>
+          <div className="check-grid">
+            <div><span>Customer</span><b>{r.name}</b></div>
+            <div><span>Phone / WhatsApp</span><b>{r.phone || "—"}</b></div>
+            <div><span>Service</span><b>{r.service_type}</b></div>
+            <div><span>Area</span><b>{r.area || "—"}</b></div>
+            <div className="full"><span>Address</span><b>{r.address || "—"}</b></div>
+            <div><span>Date</span><b>{formatDisplayDate(r.date)}</b></div>
+            <div><span>Start time</span><b>{String(r.start_time || "").slice(0,5)}</b></div>
+            <div><span>Status</span><b className={statusPillClass(r.status)}>{r.status}</b></div>
+            <div><span>Payment</span><b>{r.payment_status}</b></div>
+            <div><span>Service fee</span><b>GH₵{Number(r.service_fee || 0).toLocaleString()}</b></div>
+            <div><span>Transport</span><b>GH₵{Number(r.transport_fee || 0).toLocaleString()}</b></div>
+            <div><span>Total</span><strong>GH₵{Number(r.total_fee || 0).toLocaleString()}</strong></div>
           </div>
-        )}
+        </div>}
       </div>
     </section>
   );
 }
+function formatDisplayDate(value) { return value ? new Date(`${value}T00:00:00`).toLocaleDateString("en-GH", { day:"2-digit", month:"long", year:"numeric" }) : "—"; }
+function statusPillClass(status="") { return `status-pill status-${status.toLowerCase().replace(/[^a-z]+/g,"-")}`; }
 function Rate() {
   const params = new URLSearchParams(window.location.search);
   const ref = params.get("ref") || "";
