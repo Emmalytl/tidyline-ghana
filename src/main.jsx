@@ -324,6 +324,11 @@ function Book() {
               <div><span>Start time</span><b>{invoice.start_time?.slice(0,5)}</b></div>
               <div className="full"><span>Address</span><b>{invoice.address}</b></div>
             </div>
+            <div className="invoice-total-grid">
+              <div><span>Service fee</span><b>GH₵{Number(invoice.service_fee || 0).toLocaleString()}</b></div>
+              {invoice.laundry_addon && <div><span>Laundry</span><b>GH₵{Number(invoice.laundry_fee || 0).toLocaleString()}</b></div>}
+              <div><span>Transport</span><b>GH₵{Number(invoice.transport_fee || 0).toLocaleString()}</b></div>
+            </div>
             <div className="invoice-total"><span>Total</span><strong>GH₵{Number(invoice.total_fee || 0).toLocaleString()}</strong></div>
             <div className="invoice-status"><CheckCircle2 /> Request status: <b>Pending confirmation</b></div>
             <p className="invoice-note">Keep your booking reference. You can use it with your email to check the booking status anytime.</p>
@@ -393,6 +398,7 @@ function Check() {
             <div><span>Status</span><b className={statusPillClass(r.status)}>{r.status}</b></div>
             <div><span>Payment</span><b>{r.payment_status}</b></div>
             <div><span>Service fee</span><b>GH₵{Number(r.service_fee || 0).toLocaleString()}</b></div>
+            {r.laundry_addon && <div><span>Laundry</span><b>GH₵{Number(r.laundry_fee || 0).toLocaleString()}</b></div>}
             <div><span>Transport</span><b>GH₵{Number(r.transport_fee || 0).toLocaleString()}</b></div>
             <div><span>Total</span><strong>GH₵{Number(r.total_fee || 0).toLocaleString()}</strong></div>
           </div>

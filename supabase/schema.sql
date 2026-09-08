@@ -71,14 +71,18 @@ create policy "bookings_admin_all"
   with check (true);
 
 -- ---------------------------------------------------------------------------
--- check_booking() — safe public lookup by reference + email, matching
--- exactly what Check() selects: booking_ref, name, service_type, date,
--- start_time, status, payment_status, total_fee
+-- check_booking() — safe public lookup by reference + email. Includes
+-- laundry add-on fields so Check() can display them. NOTE: Postgres will
+-- not let CREATE OR REPLACE change a function's return columns, so the old
+-- version must be dropped first — that's what broke this before.
 -- ---------------------------------------------------------------------------
+drop function if exists public.check_booking(text, text);
+
 create or replace function public.check_booking(p_ref text, p_email text)
 returns table (
   booking_ref text, name text, phone text, email text, area text, address text,
-  service_type text, service_fee numeric, transport_fee numeric, total_fee numeric,
+  service_type text, service_fee numeric, laundry_addon boolean, laundry_fee numeric,
+  transport_fee numeric, total_fee numeric,
   date date, start_time time, status text, payment_status text
 )
 language sql
@@ -86,7 +90,8 @@ security definer
 set search_path = public
 as $$
   select b.booking_ref, b.name, b.phone, b.email, b.area, b.address,
-         b.service_type, b.service_fee, b.transport_fee, b.total_fee,
+         b.service_type, b.service_fee, b.laundry_addon, b.laundry_fee,
+         b.transport_fee, b.total_fee,
          b.date, b.start_time, b.status, b.payment_status
   from public.bookings b
   where lower(trim(b.booking_ref)) = lower(trim(p_ref))

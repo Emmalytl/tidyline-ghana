@@ -3,7 +3,7 @@ import {
   Activity, AlertCircle, CalendarCheck, CheckCircle2, ChevronDown, Clock3,
   Download, LayoutDashboard, LogOut, Menu, MoreHorizontal, Plus, RefreshCw,
   Search, Settings as SettingsIcon, Trash2, UserCheck, Users, Wallet, X,
-  XCircle, Calculator, DollarSign
+  XCircle, Calculator, Banknote
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import "./operations.css";
@@ -358,7 +358,7 @@ function Accounting({ bookings, staff }) {
     <div className="ops-page-head compact"><div><span className="ops-kicker">Finance & payroll</span><h1>Accounting</h1><p>Track service revenue, staff production, payroll, statutory deductions and the 40% administrative fee.</p></div><label className="month-picker">Month<input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></label></div>
     <div className="ops-stat-grid">
       <Stat icon={Wallet} label="Total revenue" value={money(totalRevenue)} detail={`${activeBookings.length} non-cancelled bookings`} />
-      <Stat icon={DollarSign} label="Service revenue" value={money(serviceRevenue)} detail="Before admin fee" />
+      <Stat icon={Banknote} label="Service revenue" value={money(serviceRevenue)} detail="Before admin fee" />
       <Stat icon={Calculator} label="Admin fee (40%)" value={money(adminFee)} detail="Of exact service amount" />
       <Stat icon={Users} label="Payroll cost" value={money(totalPayrollCost)} detail="Gross payroll + 13% employer contribution" />
     </div>
@@ -431,7 +431,7 @@ function BookingRow({ booking:b, staff, onUpdate, onOpen }) {
   const assigned = staff.find(s => s.id === b.staff_id);
   return <button className="ops-table-row" onClick={onOpen}>
     <div className="client-cell"><div className="ops-avatar small">{initials(b.name)}</div><div><strong>{b.name}</strong><small>{b.phone} · {b.booking_ref}</small></div></div>
-    <div><strong>{b.service_type}</strong><small>{b.area}</small></div>
+    <div><strong>{b.service_type}</strong><small>{b.area}{b.laundry_addon ? " · Laundry added" : ""}</small></div>
     <div><strong>{formatDate(b.date)}</strong><small>{b.start_time?.slice(0,5) || "—"}</small></div>
     <div className="staff-mini">{assigned ? <><span className="mini-dot">{initials(assigned.name)}</span>{assigned.name}</> : <span className="muted">Unassigned</span>}</div>
     <div><span className={statusClass(b.status)}>{b.status}</span></div>
@@ -450,7 +450,7 @@ function BookingDrawer({ booking:b, staff, onUpdate, onClose }) {
     <aside className="ops-drawer">
       <div className="ops-drawer-head"><div><span className="ops-kicker">Booking {b.booking_ref}</span><h2>{b.name}</h2></div><button className="ops-icon-btn" onClick={onClose}><X /></button></div>
       <div className="drawer-client"><div className="ops-avatar large">{initials(b.name)}</div><div><strong>{b.phone}</strong><a href={`mailto:${b.email || ""}`}>{b.email || "No email provided"}</a></div></div>
-      <div className="drawer-section"><h3>Booking details</h3><div className="detail-grid"><Detail label="Service" value={b.service_type}/><Detail label="Date" value={formatDate(b.date)}/><Detail label="Start time" value={b.start_time?.slice(0,5)}/><Detail label="Area" value={b.area}/><Detail label="Address" value={b.address}/><Detail label="Service fee" value={money(b.service_fee)}/><Detail label="Transport fee" value={money(b.transport_fee)}/><Detail label="Total" value={money(b.total_fee)} strong/></div></div>
+      <div className="drawer-section"><h3>Booking details</h3><div className="detail-grid"><Detail label="Service" value={b.service_type}/><Detail label="Date" value={formatDate(b.date)}/><Detail label="Start time" value={b.start_time?.slice(0,5)}/><Detail label="Area" value={b.area}/><Detail label="Address" value={b.address}/><Detail label="Service fee" value={money(b.service_fee)}/>{b.laundry_addon && <Detail label="Laundry" value={money(b.laundry_fee)}/>}<Detail label="Transport fee" value={money(b.transport_fee)}/><Detail label="Total" value={money(b.total_fee)} strong/></div></div>
       <div className="drawer-section"><h3>Assignment & status</h3>
         <label className="drawer-field">Assigned staff<select value={b.staff_id || ""} disabled={saving} onChange={e => change({staff_id:e.target.value || null})}><option value="">Unassigned</option>{staff.map(s=><option key={s.id} value={s.id}>{s.name}{s.active ? "" : " (inactive)"}</option>)}</select></label>
         <label className="drawer-field">Booking status<select value={b.status} disabled={saving} onChange={e => change({status:e.target.value})}>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></label>
