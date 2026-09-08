@@ -376,6 +376,22 @@ function Bookings({ bookings, staff, onUpdate, onExport }) {
   const [status, setStatus] = useState("All");
   const [service, setService] = useState("All");
   const [selected, setSelected] = useState(null);
+  const searchInput = React.useRef(null);
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchInput.current?.focus();
+      }
+      if (event.key === "Escape" && document.activeElement === searchInput.current) {
+        setQuery("");
+        searchInput.current?.blur();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   const filtered = useMemo(() => bookings.filter(b => {
     const q = query.trim().toLowerCase();
@@ -387,9 +403,18 @@ function Bookings({ bookings, staff, onUpdate, onExport }) {
     <div className="ops-page">
       <div className="ops-page-head compact"><div><span className="ops-kicker">Operations</span><h1>Bookings</h1><p>Review, assign and update every cleaning request.</p></div><button className="ops-secondary" onClick={onExport}><Download /> Export CSV</button></div>
       <div className="ops-toolbar">
-        <div className="ops-search"><Search /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search client, phone, reference or area…" /></div>
-        <select value={status} onChange={e => setStatus(e.target.value)}><option>All</option>{STATUSES.map(s=><option key={s}>{s}</option>)}</select>
-        <select value={service} onChange={e => setService(e.target.value)}><option>All</option>{SERVICE_TYPES.map(s=><option key={s}>{s}</option>)}</select>
+        <div className={`ops-search ${query ? "has-value" : ""}`}>
+          <div className="ops-search-icon"><Search /></div>
+          <div className="ops-search-main">
+            <input ref={searchInput} aria-label="Search bookings" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search bookings…" />
+            {query && <span className="ops-search-hint">Searching client, phone, reference, area or service</span>}
+          </div>
+          {query && <button type="button" className="ops-search-clear" onClick={() => setQuery("")} aria-label="Clear search"><X /></button>}
+          <kbd className="ops-search-kbd">⌘ K</kbd>
+        </div>
+        <select aria-label="Filter by status" value={status} onChange={e => setStatus(e.target.value)}><option>All</option>{STATUSES.map(s=><option key={s}>{s}</option>)}</select>
+        <select aria-label="Filter by service" value={service} onChange={e => setService(e.target.value)}><option>All</option>{SERVICE_TYPES.map(s=><option key={s}>{s}</option>)}</select>
+        <div className="ops-search-result">{query ? <><strong>{filtered.length}</strong> result{filtered.length === 1 ? "" : "s"}</> : <><strong>{bookings.length}</strong> booking{bookings.length === 1 ? "" : "s"}</>}</div>
       </div>
 
       <div className="ops-booking-table">
