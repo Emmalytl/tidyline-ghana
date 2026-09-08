@@ -134,3 +134,72 @@ begin
       foreign key (staff_id) references public.staff(id) on delete set null;
   end if;
 end $$;
+-- ---------------------------------------------------------------------------
+-- Staff authentication + customer ratings
+-- ---------------------------------------------------------------------------
+alter table public.staff add column if not exists email text;
+alter table public.staff add column if not exists auth_user_id uuid unique;
+
+alter table public.bookings add column if not exists rating_token text;
+alter table public.bookings add column if not exists staff_rating integer;
+alter table public.bookings add column if not exists staff_rating_comment text;
+alter table public.bookings add column if not exists rated_at timestamptz;
+
+update public.bookings set rating_token = encode(gen_random_bytes(16),'hex') where rating_token is null;
+alter table public.bookings alter column rating_token set default encode(gen_random_bytes(16),'hex');
+create unique index if not exists bookings_rating_token_uidx on public.bookings(rating_token);
+
+-- A staff session is identified by the auth user linked to staff.auth_user_id.
+-- Authenticated users who are not linked to a staff row remain administrators,
+-- preserving the existing admin login behaviour.
+create or replace function public.current_user_is_staff()
+returns boolean language sql stable security definer set search_path=public
+as $$ select exists(select 1 from public.staff where auth_user_id=auth.uid() and active=true); $$;
+
+grant execute on function public.current_user_is_staff() to authenticated;
+
+-- Replace the broad authenticated policies so staff cannot see other staff or
+-- other customers' bookings.
+drop policy if exists "bookings_admin_all" on public.bookings;
+drop policy if exists "bookings_staff_select" on public.bookings;
+drop policy if exists "bookings_staff_update" on public.bookings;
+create policy "bookings_admin_all" on public.bookings for all to authenticated
+using (not public.current_user_is_staff()) with check (not public.current_user_is_staff());
+create policy "bookings_staff_select" on public.bookings for select to authenticated
+using (staff_id in (select id from public.staff where auth_user_id=auth.uid() and active=true));
+create policy "bookings_staff_update" on public.bookings for update to authenticated
+using (staff_id in (select id from public.staff where auth_user_id=auth.uid() and active=true))
+with check (staff_id in (select id from public.staff where auth_user_id=auth.uid() and active=true));
+
+drop policy if exists "staff_admin_all" on public.staff;
+drop policy if exists "staff_self_select" on public.staff;
+create policy "staff_admin_all" on public.staff for all to authenticated
+using (not public.current_user_is_staff()) with check (not public.current_user_is_staff());
+create policy "staff_self_select" on public.staff for select to authenticated
+using (auth_user_id=auth.uid());
+
+-- Public, tokenized lookup for the rating page. No customer contact details
+-- are returned.
+create or replace function public.get_booking_for_rating(p_ref text, p_token text)
+returns table(booking_ref text, name text, service_type text, date date, staff_name text, staff_rating integer, staff_rating_comment text)
+language sql security definer set search_path=public
+as $$
+  select b.booking_ref,b.name,b.service_type,b.date,s.name,b.staff_rating,b.staff_rating_comment
+  from public.bookings b left join public.staff s on s.id=b.staff_id
+  where b.booking_ref=p_ref and b.rating_token=p_token and b.status='Completed'
+  limit 1;
+$$;
+grant execute on function public.get_booking_for_rating(text,text) to anon,authenticated;
+
+create or replace function public.submit_booking_rating(p_ref text, p_token text, p_rating integer, p_comment text default null)
+returns boolean
+language plpgsql security definer set search_path=public
+as $$
+begin
+  if p_rating < 1 or p_rating > 5 then raise exception 'Rating must be between 1 and 5'; end if;
+  update public.bookings set staff_rating=p_rating, staff_rating_comment=nullif(left(coalesce(p_comment,''),1000),''), rated_at=now()
+  where booking_ref=p_ref and rating_token=p_token and status='Completed';
+  return found;
+end;
+$$;
+grant execute on function public.submit_booking_rating(text,text,integer,text) to anon,authenticated;

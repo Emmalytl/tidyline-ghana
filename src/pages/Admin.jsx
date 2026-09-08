@@ -131,14 +131,33 @@ function AdminDashboard({ session }) {
   }
 
   async function addStaff(payload) {
-    const { data, error: insertError } = await supabase.from("staff").insert({
-      name: payload.name.trim(), phone: payload.phone.trim() || null
-    }).select().single();
-    if (insertError) return flash(`Error: ${insertError.message}`);
-    setStaff(prev => [...prev, data]);
-    flash("Staff member added");
+    if (!payload.email?.trim() || !payload.password) {
+      return flash("Staff email and temporary password are required");
+    }
+    const { data, error: fnError } = await supabase.functions.invoke("create-staff-user", {
+      body: {
+        name: payload.name.trim(),
+        phone: payload.phone.trim() || null,
+        email: payload.email.trim().toLowerCase(),
+        password: payload.password
+      }
+    });
+    if (fnError) return flash(`Error: ${fnError.message}`);
+    if (data?.error) return flash(`Error: ${data.error}`);
+    setStaff(prev => [...prev, data.staff]);
+    flash("Staff member and login created");
   }
 
+
+  async function createStaffLogin(payload) {
+    const { data, error: fnError } = await supabase.functions.invoke("create-staff-user", {
+      body: { staffId: payload.staffId, name: payload.name.trim(), phone: payload.phone.trim() || null, email: payload.email.trim().toLowerCase(), password: payload.password }
+    });
+    if (fnError) return flash(`Error: ${fnError.message}`);
+    if (data?.error) return flash(`Error: ${data.error}`);
+    setStaff(prev => prev.map(s => s.id === payload.staffId ? data.staff : s));
+    flash("Staff login created");
+  }
   async function editStaff(id, payload) {
     const { error: updateError } = await supabase.from("staff").update(payload).eq("id", id);
     if (updateError) return flash(`Error: ${updateError.message}`);
@@ -218,7 +237,7 @@ function AdminDashboard({ session }) {
           {error && <div className="ops-alert danger"><AlertCircle />{error}</div>}
           {tab === "dashboard" && <Overview bookings={bookings} staff={staff} setTab={setTab} />}
           {tab === "bookings" && <Bookings bookings={bookings} staff={staff} onUpdate={updateBooking} onExport={exportCSV} />}
-          {tab === "staff" && <StaffManagement staff={staff} onAdd={addStaff} onEdit={editStaff} onToggle={toggleStaff} onRemove={removeStaff} />}
+          {tab === "staff" && <StaffManagement staff={staff} onAdd={addStaff} onCreateLogin={createStaffLogin} onEdit={editStaff} onToggle={toggleStaff} onRemove={removeStaff} />}
           {tab === "settings" && <Settings settings={settings} onSave={saveSettings} />}
           {loading && <div className="ops-loading-bar"><span /></div>}
         </div>
@@ -350,22 +369,35 @@ function BookingDrawer({ booking:b, staff, onUpdate, onClose }) {
 }
 function Detail({label,value,strong}) { return <div className="detail"><span>{label}</span><b className={strong?"strong":""}>{value || "—"}</b></div>; }
 
-function StaffManagement({ staff, onAdd, onEdit, onToggle, onRemove }) {
+function StaffManagement({ staff, onAdd, onCreateLogin, onEdit, onToggle, onRemove }) {
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState(null);
   const [name,setName]=useState(""); const [phone,setPhone]=useState("");
-  function startEdit(s){ setEditing(s.id); setName(s.name); setPhone(s.phone || ""); }
+  const [email,setEmail]=useState(""); const [password,setPassword]=useState(""); const [loginOnly,setLoginOnly]=useState(false);
+  function reset(){setName("");setPhone("");setEmail("");setPassword("");setEditing(null);setShowAdd(false);setLoginOnly(false)}
+  function startEdit(s){ setEditing(s.id); setName(s.name); setPhone(s.phone || ""); setEmail(s.email || ""); setPassword(""); setShowAdd(false); setLoginOnly(false); }
+  function startLogin(s){ setEditing(s.id); setName(s.name); setPhone(s.phone || ""); setEmail(s.email || ""); setPassword(""); setShowAdd(false); setLoginOnly(true); }
   async function submit(e){
     e.preventDefault();
     if(!name.trim()) return;
-    if(editing) await onEdit(editing,{name:name.trim(),phone:phone.trim()||null});
-    else await onAdd({name,phone});
-    setName("");setPhone("");setEditing(null);setShowAdd(false);
+    if(editing && loginOnly) await onCreateLogin({staffId:editing,name,phone,email,password});
+    else if(editing) await onEdit(editing,{name:name.trim(),phone:phone.trim()||null});
+    else await onAdd({name,phone,email,password});
+    reset();
   }
   return <div className="ops-page">
-    <div className="ops-page-head compact"><div><span className="ops-kicker">Team management</span><h1>Staff</h1><p>Manage cleaners and assign them to customer bookings.</p></div><button className="ops-primary" onClick={()=>{setShowAdd(true);setEditing(null);setName("");setPhone("")}}><Plus /> Add staff</button></div>
-    {(showAdd || editing) && <form className="ops-card staff-form" onSubmit={submit}><div><h2>{editing ? "Edit staff member" : "Add staff member"}</h2><p>{editing ? "Update this cleaner's contact details." : "Add a cleaner to your operations team."}</p></div><div className="form-grid"><label>Full name<input required value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Ama Mensah"/></label><label>Phone / WhatsApp<input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="024 000 0000"/></label></div><div className="form-actions"><button type="button" className="ops-secondary" onClick={()=>{setShowAdd(false);setEditing(null)}}>Cancel</button><button className="ops-primary">{editing?"Save changes":"Add staff"}</button></div></form>}
-    <div className="ops-team-grid">{staff.map(s=><div className="staff-card" key={s.id}><div className="staff-card-top"><div className="ops-avatar large">{initials(s.name)}</div><span className={`team-state ${s.active?"active":"inactive"}`}>{s.active?"Active":"Inactive"}</span></div><h2>{s.name}</h2><p>{s.phone || "No phone on file"}</p><div className="staff-meta"><span><CalendarCheck /> {s.active ? "Available for assignment" : "Not available"}</span></div><div className="staff-actions"><button className="ops-secondary" onClick={()=>startEdit(s)}>Edit</button><button className={`ops-secondary ${s.active?"":"success"}`} onClick={()=>onToggle(s.id,s.active)}>{s.active?"Deactivate":"Activate"}</button><button className="ops-danger-icon" title="Remove staff" onClick={()=>window.confirm(`Remove ${s.name}?`) && onRemove(s.id)}><Trash2 /></button></div></div>)}</div>
+    <div className="ops-page-head compact"><div><span className="ops-kicker">Team management</span><h1>Staff</h1><p>Create staff accounts, manage cleaners and assign them to customer bookings.</p></div><button className="ops-primary" onClick={()=>{setShowAdd(true);setEditing(null);setName("");setPhone("");setEmail("");setPassword("")}}><Plus /> Add staff</button></div>
+    {(showAdd || editing) && <form className="ops-card staff-form" onSubmit={submit}>
+      <div><h2>{loginOnly ? "Create staff login" : editing ? "Edit staff member" : "Add staff member"}</h2><p>{loginOnly ? "Link this existing staff member to a Supabase login." : editing ? "Update this cleaner's contact details." : "Create the cleaner's Tidyline login. Give them the temporary password securely."}</p></div>
+      <div className="form-grid">
+        <label>Full name<input required value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Ama Mensah"/></label>
+        <label>Phone / WhatsApp<input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="024 000 0000"/></label>
+        {(!editing || loginOnly) && <label>Email / Login<input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="ama@tidyline.com"/></label>}
+        {(!editing || loginOnly) && <label>Temporary password<input required minLength={6} type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="At least 6 characters"/></label>}
+      </div>
+      <div className="form-actions"><button type="button" className="ops-secondary" onClick={reset}>Cancel</button><button className="ops-primary">{loginOnly?"Create login":editing?"Save changes":"Create staff login"}</button></div>
+    </form>}
+    <div className="ops-team-grid">{staff.map(s=><div className="staff-card" key={s.id}><div className="staff-card-top"><div className="ops-avatar large">{initials(s.name)}</div><span className={`team-state ${s.active?"active":"inactive"}`}>{s.active?"Active":"Inactive"}</span></div><h2>{s.name}</h2><p>{s.email || "Login email not set"}</p><p>{s.phone || "No phone on file"}</p><div className="staff-meta"><span><CalendarCheck /> {s.active ? "Available for assignment" : "Not available"}</span></div><div className="staff-actions"><button className="ops-secondary" onClick={()=>startEdit(s)}>Edit</button>{!s.auth_user_id&&<button className="ops-secondary" onClick={()=>startLogin(s)}>Create login</button>}<button className={`ops-secondary ${s.active?"":"success"}`} onClick={()=>onToggle(s.id,s.active)}>{s.active?"Deactivate":"Activate"}</button><button className="ops-danger-icon" title="Remove staff" onClick={()=>window.confirm(`Remove ${s.name}?`) && onRemove(s.id)}><Trash2 /></button></div></div>)}</div>
     {!staff.length && <div className="ops-card"><Empty icon={Users} title="No staff yet" text="Add your first cleaner to start assigning bookings." /></div>}
   </div>;
 }

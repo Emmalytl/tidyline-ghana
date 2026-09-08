@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { CalendarCheck, CheckCircle2, Clock3, LogIn, LogOut, MapPin, Phone, RefreshCw, UserCheck, XCircle } from "lucide-react";
+import { CalendarCheck, CheckCircle2, Clock3, LogIn, LogOut, Phone, RefreshCw, UserCheck, XCircle, MessageCircle, Star } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import "./operations.css";
 
@@ -26,69 +26,66 @@ function StaffLogin(){
   async function submit(e){e.preventDefault();setBusy(true);setError("");const {error}=await supabase.auth.signInWithPassword({email:email.trim(),password});if(error)setError(error.message);setBusy(false);}
   return <div className="ops-auth"><div className="ops-auth-card">
     <div className="ops-brand"><div className="ops-logo">T</div><div><strong>Tidyline</strong><span>Staff Portal</span></div></div>
-    <div className="ops-auth-heading"><span className="ops-kicker">Team access</span><h1>Staff sign in</h1><p>Sign in to view the cleaning jobs assigned to you.</p></div>
+    <div className="ops-auth-heading"><span className="ops-kicker">Team access</span><h1>Staff sign in</h1><p>Use the staff email and password created by your Tidyline administrator.</p></div>
     <form className="ops-auth-form" onSubmit={submit}>{error&&<div className="ops-alert danger"><XCircle/>{error}</div>}
       <label>Email<input type="email" required autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="your@email.com"/></label>
       <label>Password<input type="password" required autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••"/></label>
       <button className="ops-primary ops-full" disabled={busy}>{busy?<><div className="button-spinner"/>Signing in…</>:<><LogIn/>Sign in</>}</button>
     </form>
-    <div className="ops-auth-foot">Use the account created for your Tidyline staff role.</div>
+    <div className="ops-auth-foot">Only your assigned cleaning jobs will be visible after login.</div>
   </div></div>;
 }
 
 function StaffDashboard({session}){
-  const [staff,setStaff]=useState([]),[bookings,setBookings]=useState([]),[selected,setSelected]=useState(""),[loading,setLoading]=useState(true),[toast,setToast]=useState(""),[error,setError]=useState("");
+  const [me,setMe]=useState(null),[bookings,setBookings]=useState([]),[loading,setLoading]=useState(true),[toast,setToast]=useState(""),[error,setError]=useState("");
   async function load(){
     setLoading(true);setError("");
-    const [s,b]=await Promise.all([
-      supabase.from("staff").select("*").order("name"),
-      supabase.from("bookings").select("*").order("date",{ascending:true}).order("start_time",{ascending:true})
-    ]);
-    if(s.error||b.error)setError([s.error,b.error].filter(Boolean).map(x=>x.message).join(" • "));
-    setStaff(s.data||[]);setBookings(b.data||[]);
-    const saved=localStorage.getItem("tidyline_staff_id");
-    const valid=(s.data||[]).find(x=>x.id===saved && x.active);
-    if(valid)setSelected(valid.id); else if((s.data||[]).length===1)setSelected(s.data[0].id);
-    setLoading(false);
+    const {data:staff,error:sError}=await supabase.from("staff").select("*").eq("auth_user_id",session.user.id).eq("active",true).maybeSingle();
+    if(sError){setError(sError.message);setLoading(false);return;}
+    if(!staff){setError("Your login is valid, but no active Tidyline staff profile is linked to it. Ask the administrator to check your account.");setLoading(false);return;}
+    const {data:b,error:bError}=await supabase.from("bookings").select("*").eq("staff_id",staff.id).order("date",{ascending:true}).order("start_time",{ascending:true});
+    if(bError)setError(bError.message);
+    setMe(staff);setBookings(b||[]);setLoading(false);
   }
-  useEffect(()=>{load()},[]);
-  const me=staff.find(s=>s.id===selected);
-  const assigned=useMemo(()=>bookings.filter(b=>b.staff_id===selected),[bookings,selected]);
+  useEffect(()=>{load()},[session.user.id]);
   const today=new Date().toISOString().slice(0,10);
-  const todayJobs=assigned.filter(b=>b.date===today && b.status!=="Cancelled");
-  const upcoming=assigned.filter(b=>b.date>=today && b.status!=="Cancelled");
-  const completed=assigned.filter(b=>b.status==="Completed");
-
-  function choose(id){setSelected(id);localStorage.setItem("tidyline_staff_id",id);}
+  const todayJobs=useMemo(()=>bookings.filter(b=>b.date===today&&b.status!=="Cancelled"),[bookings,today]);
+  const upcoming=useMemo(()=>bookings.filter(b=>b.date>=today&&b.status!=="Cancelled"),[bookings,today]);
+  const completed=useMemo(()=>bookings.filter(b=>b.status==="Completed"),[bookings]);
   async function updateStatus(id,status){
     const {error}=await supabase.from("bookings").update({status}).eq("id",id);
     if(error){setToast(`Error: ${error.message}`);return;}
-    setBookings(prev=>prev.map(b=>b.id===id?{...b,status}:b));setToast(`Job marked ${status.toLowerCase()}`);
-    setTimeout(()=>setToast(""),2500);
+    const booking=bookings.find(b=>b.id===id);
+    setBookings(prev=>prev.map(b=>b.id===id?{...b,status}:b));
+    setToast(`Job marked ${status.toLowerCase()}`);setTimeout(()=>setToast(""),3000);
+    if(status==="Completed" && booking) openCompletionWhatsApp(booking,me);
   }
-  async function signOut(){localStorage.removeItem("tidyline_staff_id");await supabase.auth.signOut();}
+  function openCompletionWhatsApp(b,staff){
+    const phone=String(b.phone||"").replace(/\D/g,"");
+    if(!phone) return;
+    const base=window.location.origin;
+    const link=`${base}/rate?ref=${encodeURIComponent(b.booking_ref)}&token=${encodeURIComponent(b.rating_token||"")}`;
+    const message=`Hello ${b.name}, your Tidyline cleaning has been completed successfully. Thank you for choosing us. Please rate ${staff?.name||"your cleaner"} here: ${link}`;
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`,"_blank","noopener,noreferrer");
+  }
+  async function signOut(){await supabase.auth.signOut();}
 
   return <div className="ops-shell staff-shell">
     <aside className="ops-sidebar">
       <div className="ops-sidebar-brand"><div className="ops-logo">T</div><div><strong>Tidyline</strong><span>Staff Portal</span></div></div>
       <div className="ops-nav-title">My work</div>
-      <div className="staff-side-person">{me?<><div className="ops-avatar large">{initials(me.name)}</div><strong>{me.name}</strong><span>{me.active?"Active team member":"Inactive"}</span></>:<><UserCheck/><strong>Select your profile</strong></>}</div>
+      <div className="staff-side-person">{me?<><div className="ops-avatar large">{initials(me.name)}</div><strong>{me.name}</strong><span>{me.email || session.user.email}</span><span>{me.active?"Active team member":"Inactive"}</span></>:<><UserCheck/><strong>Loading profile…</strong></>}</div>
       <div className="ops-sidebar-bottom"><a href="/admin" className="ops-staff-link"><CalendarCheck/> Admin login</a><button onClick={signOut}><LogOut/> Sign out</button></div>
     </aside>
     <main className="ops-main">
-      <header className="ops-header"><div className="ops-mobile-title"><span>Tidyline</span></div><div className="ops-header-spacer"/>
-        <button className="ops-refresh" onClick={load}><RefreshCw/> Refresh</button>
-        <div className="ops-user"><div className="ops-avatar">{initials(me?.name || session.user.email)}</div><div><strong>{me?.name || session.user.email}</strong><span>Staff member</span></div></div>
-      </header>
+      <header className="ops-header"><div className="ops-mobile-title"><span>Tidyline</span></div><div className="ops-header-spacer"/><button className="ops-refresh" onClick={load}><RefreshCw/> Refresh</button><div className="ops-user"><div className="ops-avatar">{initials(me?.name || session.user.email)}</div><div><strong>{me?.name || session.user.email}</strong><span>Staff member</span></div></div></header>
       <div className="ops-content">
         {error&&<div className="ops-alert danger"><XCircle/>{error}</div>}
-        {staff.length>1&&<div className="staff-picker ops-card"><div><span className="ops-kicker">Staff profile</span><h2>Who are you?</h2><p>Select your staff profile to view assigned jobs.</p></div><select value={selected} onChange={e=>choose(e.target.value)}><option value="">Select your name</option>{staff.filter(s=>s.active).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>}
-        {!selected ? <div className="ops-card"><div className="ops-empty"><UserCheck/><strong>Select your staff profile</strong><span>Choose your name above to see your assigned cleaning jobs.</span></div></div> :
-        <div className="ops-page">
-          <div className="ops-page-head"><div><span className="ops-kicker">Staff workspace</span><h1>Hi, {me?.name?.split(" ")[0] || "there"}.</h1><p>Here are the cleaning jobs assigned to you.</p></div></div>
+        {!error && <div className="ops-page">
+          <div className="ops-page-head"><div><span className="ops-kicker">Staff workspace</span><h1>Hi, {me?.name?.split(" ")[0] || "there"}.</h1><p>Only bookings assigned to your staff account are shown here.</p></div></div>
           <div className="ops-stat-grid staff-stats"><Stat icon={CalendarCheck} label="Today's jobs" value={todayJobs.length} detail="Scheduled today"/><Stat icon={Clock3} label="Upcoming" value={upcoming.length} detail="Active scheduled jobs"/><Stat icon={CheckCircle2} label="Completed" value={completed.length} detail="Jobs completed"/></div>
-          <section className="ops-card"><div className="ops-card-head"><div><h2>My jobs</h2><p>Open a job to see the full customer details.</p></div></div>
-            {loading?<div className="ops-loader compact"><div className="spinner"/>Loading jobs…</div>:assigned.length?<div className="staff-jobs">{assigned.map(b=><StaffJob key={b.id} booking={b} onStatus={updateStatus}/>)}</div>:<div className="ops-empty"><CalendarCheck/><strong>No jobs assigned</strong><span>Your assigned bookings will appear here.</span></div>}
+          <section className="ops-card"><div className="ops-card-head"><div><h2>My jobs</h2><p>Open a job for customer details and status actions.</p></div></div>
+            {loading?<div className="ops-loader compact"><div className="spinner"/>Loading jobs…</div>:bookings.length?<div className="staff-jobs">{bookings.map(b=><StaffJob key={b.id} booking={b} onStatus={updateStatus}/>)}</div>:<div className="ops-empty"><CalendarCheck/><strong>No jobs assigned</strong><span>Your assigned bookings will appear here.</span></div>}
           </section>
         </div>}
       </div>
@@ -109,8 +106,9 @@ function StaffJob({booking:b,onStatus}){
     </button>
     {open&&<div className="staff-job-details">
       <div className="detail-grid"><div className="detail"><span>Date</span><b>{fmtDate(b.date)}</b></div><div className="detail"><span>Time</span><b>{b.start_time?.slice(0,5)||"—"}</b></div><div className="detail"><span>Service</span><b>{b.service_type}</b></div><div className="detail"><span>Total</span><b>{money(b.total_fee)}</b></div><div className="detail full"><span>Address</span><b>{b.address||"—"}</b></div></div>
-      <div className="staff-contact"><div className="ops-avatar">{initials(b.name)}</div><div><strong>{b.name}</strong><span>{b.phone}</span></div><a href={`tel:${b.phone}`}><Phone/>Call</a><a className="whatsapp" target="_blank" rel="noreferrer" href={`https://wa.me/${String(b.phone||"").replace(/\D/g,"")}`}>WhatsApp</a></div>
-      {b.status!=="Cancelled"&&<div className="staff-status-actions">{b.status==="Pending"&&<button className="ops-primary" onClick={()=>onStatus(b.id,"Confirmed")}><CheckCircle2/> Accept job</button>}{b.status==="Confirmed"&&<button className="ops-primary" onClick={()=>onStatus(b.id,"Completed")}><CheckCircle2/> Mark completed</button>}{b.status!=="Completed"&&<button className="ops-secondary danger-text" onClick={()=>onStatus(b.id,"Cancelled")}><XCircle/> Cancel</button>}</div>}
+      <div className="staff-contact"><div className="ops-avatar">{initials(b.name)}</div><div><strong>{b.name}</strong><span>{b.phone}</span></div><a href={`tel:${b.phone}`}><Phone/>Call</a><a className="whatsapp" target="_blank" rel="noreferrer" href={`https://wa.me/${String(b.phone||"").replace(/\D/g,"")}`}><MessageCircle/>WhatsApp</a></div>
+      {b.status!=="Cancelled"&&<div className="staff-status-actions">{b.status==="Pending"&&<button className="ops-primary" onClick={()=>onStatus(b.id,"Confirmed")}><CheckCircle2/> Accept job</button>}{b.status==="Confirmed"&&<button className="ops-primary" onClick={()=>onStatus(b.id,"Completed")}><CheckCircle2/> Mark completed & notify</button>}{b.status!=="Completed"&&<button className="ops-secondary danger-text" onClick={()=>onStatus(b.id,"Cancelled")}><XCircle/> Cancel</button>}</div>}
+      {b.status==="Completed"&&<div className="completion-note"><CheckCircle2/><span><strong>Completed</strong><small>Customer can rate the cleaner from the WhatsApp message.</small></span></div>}
     </div>}
   </article>;
 }

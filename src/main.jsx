@@ -16,6 +16,7 @@ import {
   Star,
   CalendarDays,
   ShieldCheck,
+  XCircle,
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import Admin from "./pages/Admin";
@@ -461,6 +462,40 @@ function Check() {
     </section>
   );
 }
+function Rate() {
+  const params = new URLSearchParams(window.location.search);
+  const ref = params.get("ref") || "";
+  const token = params.get("token") || "";
+  const [booking,setBooking]=useState(null),[rating,setRating]=useState(0),[comment,setComment]=useState(""),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[done,setDone]=useState(false),[error,setError]=useState("");
+  useEffect(()=>{
+    async function load(){
+      if(!ref||!token){setError("This rating link is incomplete.");setLoading(false);return;}
+      const {data,error}=await supabase.rpc("get_booking_for_rating",{p_ref:ref,p_token:token});
+      if(error||!data?.length){setError(error?.message||"This rating link is invalid or has expired.");setLoading(false);return;}
+      setBooking(data[0]);setRating(data[0].staff_rating||0);setComment(data[0].staff_rating_comment||"");setLoading(false);
+    }
+    load();
+  },[ref,token]);
+  async function submit(e){
+    e.preventDefault(); if(!rating)return setError("Please choose a rating first."); setSaving(true);setError("");
+    const {error}=await supabase.rpc("submit_booking_rating",{p_ref:ref,p_token:token,p_rating:rating,p_comment:comment.trim()||null});
+    if(error)setError(error.message); else setDone(true); setSaving(false);
+  }
+  if(loading)return <section className="page"><div className="narrow result"><p>Loading rating page…</p></div></section>;
+  if(error&&!booking)return <section className="page"><div className="narrow result"><XCircle/><h2>Rating link unavailable</h2><p>{error}</p></div></section>;
+  return <section className="page"><div className="narrow"><div className="result">
+    {done?<><CheckCircle2/><h2>Thank you!</h2><p>Your rating has been submitted. We appreciate your feedback.</p></>:<>
+      <span className="eyebrow">Tidyline</span><h1>How was your cleaning?</h1><p>Thank you, {booking.name}. Please rate <b>{booking.staff_name}</b>.</p>
+      <form className="rating-form" onSubmit={submit}>
+        <div className="stars" aria-label="Choose a rating">{[1,2,3,4,5].map(n=><button type="button" key={n} className={rating>=n?"active":""} onClick={()=>setRating(n)} aria-label={`${n} star${n>1?"s":""}`}><Star fill="currentColor"/></button>)}</div>
+        <textarea value={comment} onChange={e=>setComment(e.target.value)} placeholder="Tell us about your experience (optional)" />
+        {error&&<div className="notice">{error}</div>}
+        <button className="primary" disabled={saving}>{saving?"Submitting…":"Submit rating"}</button>
+      </form>
+    </>}
+  </div></div></section>;
+}
+
 function LegacyAdmin() {
   return (
     <section className="page">
@@ -492,6 +527,7 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/book" element={<Book />} />
         <Route path="/check" element={<Check />} />
+        <Route path="/rate" element={<Rate />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/staff" element={<Staff />} />
       </Routes>
