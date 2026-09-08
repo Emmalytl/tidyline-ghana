@@ -33,6 +33,24 @@ alter table public.bookings add column if not exists staff_id uuid;
 alter table public.bookings add column if not exists laundry_addon boolean not null default false;
 alter table public.bookings add column if not exists laundry_fee numeric(12,2) not null default 0;
 
+-- If laundry_addon already existed as text (from an earlier version), the
+-- line above silently skipped it — force it to a real boolean now.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'bookings'
+      and column_name = 'laundry_addon' and data_type <> 'boolean'
+  ) then
+    alter table public.bookings
+      alter column laundry_addon
+      type boolean
+      using (case when lower(laundry_addon::text) in ('true','t','1','yes') then true else false end);
+    alter table public.bookings alter column laundry_addon set default false;
+    alter table public.bookings alter column laundry_addon set not null;
+  end if;
+end $$;
+
 alter table public.bookings enable row level security;
 
 -- Never allow a new or edited booking to use a date before today.
