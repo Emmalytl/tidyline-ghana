@@ -32,6 +32,29 @@ create table if not exists public.bookings (
 alter table public.bookings add column if not exists staff_id uuid;
 alter table public.bookings add column if not exists laundry_addon boolean not null default false;
 alter table public.bookings add column if not exists laundry_fee numeric(12,2) not null default 0;
+alter table public.bookings add column if not exists started_at timestamptz;
+alter table public.bookings add column if not exists completed_at timestamptz;
+alter table public.bookings add column if not exists job_photo_url text;
+
+-- ---------------------------------------------------------------------------
+-- Job photos storage bucket — staff upload a photo of the area when they
+-- start a job. Public read (so admin/client can view via link), only
+-- authenticated (staff/admin) can upload.
+-- ---------------------------------------------------------------------------
+insert into storage.buckets (id, name, public)
+values ('job-photos', 'job-photos', true)
+on conflict (id) do nothing;
+
+drop policy if exists "job_photos_public_read" on storage.objects;
+create policy "job_photos_public_read"
+  on storage.objects for select
+  using (bucket_id = 'job-photos');
+
+drop policy if exists "job_photos_authenticated_insert" on storage.objects;
+create policy "job_photos_authenticated_insert"
+  on storage.objects for insert
+  to authenticated
+  with check (bucket_id = 'job-photos');
 
 -- If laundry_addon already existed as text (from an earlier version), the
 -- line above silently skipped it — force it to a real boolean now.

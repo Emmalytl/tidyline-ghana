@@ -8,7 +8,7 @@ import {
 import { supabase } from "../lib/supabase";
 import "./operations.css";
 
-const STATUSES = ["Pending", "Confirmed", "Completed", "Cancelled"];
+const STATUSES = ["Pending", "Confirmed", "In Progress", "Completed", "Cancelled"];
 const PAYMENT_STATUSES = ["Unpaid", "Paid"];
 const SERVICE_TYPES = [
   "Regular Cleaning", "Deep Cleaning", "Move In / Out",
@@ -373,7 +373,7 @@ function Accounting({ bookings, staff }) {
 
 function Bookings({ bookings, staff, onUpdate, onExport }) {
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("All");
+  const [status, setStatus] = useState("Upcoming");
   const [service, setService] = useState("All");
   const [selected, setSelected] = useState(null);
   const searchInput = React.useRef(null);
@@ -396,7 +396,8 @@ function Bookings({ bookings, staff, onUpdate, onExport }) {
   const filtered = useMemo(() => bookings.filter(b => {
     const q = query.trim().toLowerCase();
     const matchesQuery = !q || [b.name,b.phone,b.booking_ref,b.area,b.email,b.service_type].some(v => String(v || "").toLowerCase().includes(q));
-    return matchesQuery && (status === "All" || b.status === status) && (service === "All" || b.service_type === service);
+    const matchesStatus = status === "All" ? true : status === "Upcoming" ? (b.status !== "Completed" && b.status !== "Cancelled") : b.status === status;
+    return matchesQuery && matchesStatus && (service === "All" || b.service_type === service);
   }), [bookings, query, status, service]);
 
   return (
@@ -412,9 +413,9 @@ function Bookings({ bookings, staff, onUpdate, onExport }) {
           {query && <button type="button" className="ops-search-clear" onClick={() => setQuery("")} aria-label="Clear search"><X /></button>}
           <kbd className="ops-search-kbd">⌘ K</kbd>
         </div>
-        <select aria-label="Filter by status" value={status} onChange={e => setStatus(e.target.value)}><option>All</option>{STATUSES.map(s=><option key={s}>{s}</option>)}</select>
+        <select aria-label="Filter by status" value={status} onChange={e => setStatus(e.target.value)}><option>Upcoming</option><option>All</option>{STATUSES.map(s=><option key={s}>{s}</option>)}</select>
         <select aria-label="Filter by service" value={service} onChange={e => setService(e.target.value)}><option>All</option>{SERVICE_TYPES.map(s=><option key={s}>{s}</option>)}</select>
-        <div className="ops-search-result">{query ? <><strong>{filtered.length}</strong> result{filtered.length === 1 ? "" : "s"}</> : <><strong>{bookings.length}</strong> booking{bookings.length === 1 ? "" : "s"}</>}</div>
+        <div className="ops-search-result"><strong>{filtered.length}</strong> booking{filtered.length === 1 ? "" : "s"}{status !== "All" ? ` · ${status}` : ""}</div>
       </div>
 
       <div className="ops-booking-table">
@@ -451,6 +452,7 @@ function BookingDrawer({ booking:b, staff, onUpdate, onClose }) {
       <div className="ops-drawer-head"><div><span className="ops-kicker">Booking {b.booking_ref}</span><h2>{b.name}</h2></div><button className="ops-icon-btn" onClick={onClose}><X /></button></div>
       <div className="drawer-client"><div className="ops-avatar large">{initials(b.name)}</div><div><strong>{b.phone}</strong><a href={`mailto:${b.email || ""}`}>{b.email || "No email provided"}</a></div></div>
       <div className="drawer-section"><h3>Booking details</h3><div className="detail-grid"><Detail label="Service" value={b.service_type}/><Detail label="Date" value={formatDate(b.date)}/><Detail label="Start time" value={b.start_time?.slice(0,5)}/><Detail label="Area" value={b.area}/><Detail label="Address" value={b.address}/><Detail label="Service fee" value={money(b.service_fee)}/>{b.laundry_addon && <Detail label="Laundry" value={money(b.laundry_fee)}/>}<Detail label="Transport fee" value={money(b.transport_fee)}/><Detail label="Total" value={money(b.total_fee)} strong/></div></div>
+      {(b.job_photo_url || b.started_at || b.completed_at) && <div className="drawer-section"><h3>Job progress</h3><div className="detail-grid">{b.started_at && <Detail label="Started" value={new Date(b.started_at).toLocaleString("en-GH")}/>}{b.completed_at && <Detail label="Completed" value={new Date(b.completed_at).toLocaleString("en-GH")}/>}</div>{b.job_photo_url && <a className="job-photo-preview" style={{marginTop:12}} href={b.job_photo_url} target="_blank" rel="noreferrer"><img src={b.job_photo_url} alt="Area at job start"/><span>View start photo</span></a>}</div>}
       <div className="drawer-section"><h3>Assignment & status</h3>
         <label className="drawer-field">Assigned staff<select value={b.staff_id || ""} disabled={saving} onChange={e => change({staff_id:e.target.value || null})}><option value="">Unassigned</option>{staff.map(s=><option key={s.id} value={s.id}>{s.name}{s.active ? "" : " (inactive)"}</option>)}</select></label>
         <label className="drawer-field">Booking status<select value={b.status} disabled={saving} onChange={e => change({status:e.target.value})}>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></label>

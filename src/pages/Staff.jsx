@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { CalendarCheck, CheckCircle2, Clock3, LogIn, LogOut, Phone, RefreshCw, UserCheck, XCircle, MessageCircle, Star } from "lucide-react";
+import { CalendarCheck, CheckCircle2, Clock3, LogIn, LogOut, Phone, RefreshCw, UserCheck, XCircle, MessageCircle, Star, Camera, Loader2 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import "./operations.css";
+
+const WA = import.meta.env.VITE_WHATSAPP_NUMBER || "233XXXXXXXXX";
 
 function initials(name="") { return name.split(" ").filter(Boolean).slice(0,2).map(x=>x[0]).join("").toUpperCase() || "TL"; }
 function money(v){return `GH₵${Number(v||0).toLocaleString("en-GH",{minimumFractionDigits:0,maximumFractionDigits:2})}`;}
@@ -64,18 +66,40 @@ function StaffDashboard({session}){
   async function updateStatus(id,status){
     const {error}=await supabase.from("bookings").update({status}).eq("id",id);
     if(error){setToast(`Error: ${error.message}`);return;}
-    const booking=bookings.find(b=>b.id===id);
     setBookings(prev=>prev.map(b=>b.id===id?{...b,status}:b));
     setToast(`Job marked ${status.toLowerCase()}`);setTimeout(()=>setToast(""),3000);
-    if(status==="Completed" && booking) openCompletionWhatsApp(booking,me);
   }
-  function openCompletionWhatsApp(b,staff){
+  async function startJob(id,file){
+    if(!file) return;
+    setToast("Uploading photo…");
+    const path=`${id}/${Date.now()}-${file.name}`.replace(/\s+/g,"-");
+    const {error:upErr}=await supabase.storage.from("job-photos").upload(path,file,{upsert:true});
+    if(upErr){setToast(`Photo upload failed: ${upErr.message}`);return;}
+    const {data:pub}=supabase.storage.from("job-photos").getPublicUrl(path);
+    const patch={status:"In Progress",started_at:new Date().toISOString(),job_photo_url:pub.publicUrl};
+    const {error}=await supabase.from("bookings").update(patch).eq("id",id);
+    if(error){setToast(`Error: ${error.message}`);return;}
+    setBookings(prev=>prev.map(b=>b.id===id?{...b,...patch}:b));
+    setToast("Job started — photo saved");setTimeout(()=>setToast(""),3000);
+  }
+  async function completeJob(id){
+    const patch={status:"Completed",completed_at:new Date().toISOString()};
+    const {error}=await supabase.from("bookings").update(patch).eq("id",id);
+    if(error){setToast(`Error: ${error.message}`);return;}
+    setBookings(prev=>prev.map(b=>b.id===id?{...b,...patch}:b));
+    setToast("Job marked completed");setTimeout(()=>setToast(""),3000);
+  }
+  function openClientWhatsApp(b,staff){
     const phone=String(b.phone||"").replace(/\D/g,"");
     if(!phone) return;
     const base=window.location.origin;
     const link=`${base}/rate?ref=${encodeURIComponent(b.booking_ref)}&token=${encodeURIComponent(b.rating_token||"")}`;
     const message=`Hello ${b.name}, your Tidyline cleaning has been completed successfully. Thank you for choosing us. Please rate ${staff?.name||"your cleaner"} here: ${link}`;
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`,"_blank","noopener,noreferrer");
+  }
+  function openAdminWhatsApp(b,staff){
+    const message=`Job update: ${b.booking_ref} (${b.service_type} for ${b.name} in ${b.area}) has been completed by ${staff?.name||"a staff member"}.`;
+    window.open(`https://wa.me/${WA.replace(/\D/g,"")}?text=${encodeURIComponent(message)}`,"_blank","noopener,noreferrer");
   }
   async function signOut(){await supabase.auth.signOut();}
 
@@ -95,7 +119,7 @@ function StaffDashboard({session}){
           <div className="ops-stat-grid staff-stats"><Stat icon={CalendarCheck} label="Today's jobs" value={todayJobs.length} detail="Scheduled today"/><Stat icon={Clock3} label="Upcoming" value={upcoming.length} detail="Active scheduled jobs"/><Stat icon={CheckCircle2} label="Completed" value={completed.length} detail="Jobs completed"/></div>
           {me && <StaffPayCard staff={me}/>}
           <section className="ops-card"><div className="ops-card-head"><div><h2>My jobs</h2><p>Open a job for customer details and status actions.</p></div></div>
-            {loading?<div className="ops-loader compact"><div className="spinner"/>Loading jobs…</div>:bookings.length?<div className="staff-jobs">{bookings.map(b=><StaffJob key={b.id} booking={b} onStatus={updateStatus}/>)}</div>:<div className="ops-empty"><CalendarCheck/><strong>No jobs assigned</strong><span>Your assigned bookings will appear here.</span></div>}
+            {loading?<div className="ops-loader compact"><div className="spinner"/>Loading jobs…</div>:bookings.length?<div className="staff-jobs">{bookings.map(b=><StaffJob key={b.id} booking={b} me={me} onAccept={id=>updateStatus(id,"Confirmed")} onCancel={id=>updateStatus(id,"Cancelled")} onStart={startJob} onComplete={completeJob} onNotifyClient={openClientWhatsApp} onNotifyAdmin={openAdminWhatsApp}/>)}</div>:<div className="ops-empty"><CalendarCheck/><strong>No jobs assigned</strong><span>Your assigned bookings will appear here.</span></div>}
           </section>
         </div>}
       </div>
@@ -111,8 +135,17 @@ function StaffPayCard({staff}){
 
 function Stat({icon:Icon,label,value,detail}){return <div className="ops-stat"><div className="ops-stat-icon"><Icon/></div><div><span>{label}</span><strong>{value}</strong><small>{detail}</small></div></div>;}
 
-function StaffJob({booking:b,onStatus}){
+function StaffJob({booking:b,me,onAccept,onCancel,onStart,onComplete,onNotifyClient,onNotifyAdmin}){
   const [open,setOpen]=useState(false);
+  const [uploading,setUploading]=useState(false);
+  async function handlePhoto(e){
+    const file=e.target.files?.[0];
+    e.target.value="";
+    if(!file) return;
+    setUploading(true);
+    await onStart(b.id,file);
+    setUploading(false);
+  }
   return <article className={`staff-job ${open?"expanded":""}`}>
     <button className="staff-job-summary" onClick={()=>setOpen(!open)}>
       <div className="job-date"><b>{new Date(`${b.date}T00:00:00`).getDate()}</b><span>{new Date(`${b.date}T00:00:00`).toLocaleDateString("en-GH",{month:"short"})}</span></div>
@@ -122,8 +155,25 @@ function StaffJob({booking:b,onStatus}){
     {open&&<div className="staff-job-details">
       <div className="detail-grid"><div className="detail"><span>Date</span><b>{fmtDate(b.date)}</b></div><div className="detail"><span>Time</span><b>{b.start_time?.slice(0,5)||"—"}</b></div><div className="detail"><span>Service</span><b>{b.service_type}</b></div><div className="detail"><span>Total</span><b>{money(b.total_fee)}</b></div><div className="detail full"><span>Address</span><b>{b.address||"—"}</b></div></div>
       <div className="staff-contact"><div className="ops-avatar">{initials(b.name)}</div><div><strong>{b.name}</strong><span>{b.phone}</span></div><a href={`tel:${b.phone}`}><Phone/>Call</a><a className="whatsapp" target="_blank" rel="noreferrer" href={`https://wa.me/${String(b.phone||"").replace(/\D/g,"")}`}><MessageCircle/>WhatsApp</a></div>
-      {b.status!=="Cancelled"&&<div className="staff-status-actions">{b.status==="Pending"&&<button className="ops-primary" onClick={()=>onStatus(b.id,"Confirmed")}><CheckCircle2/> Accept job</button>}{b.status==="Confirmed"&&<button className="ops-primary" onClick={()=>onStatus(b.id,"Completed")}><CheckCircle2/> Mark completed & notify</button>}{b.status!=="Completed"&&<button className="ops-secondary danger-text" onClick={()=>onStatus(b.id,"Cancelled")}><XCircle/> Cancel</button>}</div>}
-      {b.status==="Completed"&&<div className="completion-note"><CheckCircle2/><span><strong>Completed</strong><small>Customer can rate the cleaner from the WhatsApp message.</small></span></div>}
+
+      {b.status==="Pending" && <div className="staff-status-actions"><button className="ops-primary" onClick={()=>onAccept(b.id)}><CheckCircle2/> Accept job</button><button className="ops-secondary danger-text" onClick={()=>onCancel(b.id)}><XCircle/> Cancel</button></div>}
+
+      {b.status==="Confirmed" && <div className="staff-status-actions">
+        <label className="ops-primary staff-photo-btn">{uploading?<><Loader2 className="spin"/> Uploading…</>:<><Camera/> Start job (add photo)</>}<input type="file" accept="image/*" capture="environment" hidden disabled={uploading} onChange={handlePhoto}/></label>
+        <button className="ops-secondary danger-text" onClick={()=>onCancel(b.id)}><XCircle/> Cancel</button>
+      </div>}
+
+      {b.status==="In Progress" && <div className="staff-status-actions in-progress">
+        {b.job_photo_url && <a className="job-photo-preview" href={b.job_photo_url} target="_blank" rel="noreferrer"><img src={b.job_photo_url} alt="Area before cleaning"/><span>View start photo</span></a>}
+        <button className="ops-primary" onClick={()=>onComplete(b.id)}><CheckCircle2/> Mark job complete</button>
+      </div>}
+
+      {b.status==="Completed" && <div className="staff-status-actions completed-actions">
+        <button className="ops-secondary" onClick={()=>onNotifyClient(b,me)}><MessageCircle/> Notify client on WhatsApp</button>
+        <button className="ops-secondary" onClick={()=>onNotifyAdmin(b,me)}><MessageCircle/> Notify admin on WhatsApp</button>
+      </div>}
+
+      {b.status==="Completed"&&<div className="completion-note"><CheckCircle2/><span><strong>Completed</strong><small>Use the buttons above to notify the client and admin on WhatsApp — sending is manual, so nothing goes out until you tap it.</small></span></div>}
     </div>}
   </article>;
 }
