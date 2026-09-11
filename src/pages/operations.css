@@ -34,6 +34,10 @@
 .accounting-list{display:grid;gap:0}
 .accounting-row{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:13px 0;border-bottom:1px solid var(--line)}
 .accounting-row:last-child{border-bottom:0}
+.accounting-row .ops-icon-btn{width:32px;height:32px;flex:none}
+.ops-inline-form{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:18px}
+.ops-inline-form input,.ops-inline-form select{flex:1;min-width:130px}
+.ops-inline-form button{flex:none}
 .accounting-note{margin-top:16px;padding:12px 14px;background:#f5f9fc;border:1px solid var(--line);border-radius:12px;color:var(--muted);font-size:11px;line-height:1.6}
 .payroll-table{overflow-x:auto}
 .payroll-table .ops-table-row,.payroll-table .ops-table-head{min-width:980px}

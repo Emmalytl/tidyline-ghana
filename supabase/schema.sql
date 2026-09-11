@@ -278,3 +278,26 @@ begin
 end;
 $$;
 grant execute on function public.submit_booking_rating(text,text,integer,text) to anon,authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Expenses — general business costs (supplies, fuel, equipment, rent, etc.),
+-- optionally linked to a specific booking. Admin-only: staff never see this.
+-- ---------------------------------------------------------------------------
+create table if not exists public.expenses (
+  id uuid primary key default gen_random_uuid(),
+  booking_id uuid references public.bookings(id) on delete set null,
+  category text not null default 'Other',
+  description text,
+  amount numeric(12,2) not null default 0,
+  expense_date date not null default current_date,
+  created_at timestamptz not null default now()
+);
+
+alter table public.expenses enable row level security;
+
+drop policy if exists "expenses_admin_all" on public.expenses;
+create policy "expenses_admin_all"
+  on public.expenses for all
+  to authenticated
+  using (not public.current_user_is_staff())
+  with check (not public.current_user_is_staff());
