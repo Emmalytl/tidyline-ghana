@@ -35,6 +35,8 @@
 .accounting-row{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:13px 0;border-bottom:1px solid var(--line)}
 .accounting-row:last-child{border-bottom:0}
 .accounting-row .ops-icon-btn{width:32px;height:32px;flex:none}
+.expense-row{cursor:pointer;transition:background .15s}
+.expense-row:hover{background:#f7fafc}
 .ops-inline-form{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:18px}
 .ops-inline-form input,.ops-inline-form select{flex:1;min-width:130px}
 .ops-inline-form button{flex:none}

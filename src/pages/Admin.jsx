@@ -341,6 +341,7 @@ function Accounting({ bookings, staff }) {
   const [month, setMonth] = useState(new Date().toISOString().slice(0,7));
   const [expenses, setExpenses] = useState([]);
   const [expLoading, setExpLoading] = useState(true);
+  const [selectedExpense, setSelectedExpense] = useState(null);
   const [newExpense, setNewExpense] = useState({ expense_date: new Date().toISOString().slice(0,10), category: "Supplies", description: "", amount: "", booking_id: "" });
 
   useEffect(() => { loadExpenses(); }, [month]);
@@ -417,12 +418,13 @@ function Accounting({ bookings, staff }) {
       </form>
       {expLoading ? <div className="ops-loader compact"><div className="spinner"/>Loading expenses…</div> : expenses.length ? <div className="accounting-list">{expenses.map(x=>{
         const linked = bookings.find(b=>b.id===x.booking_id);
-        return <div className="accounting-row" key={x.id}>
+        return <div className="accounting-row expense-row" key={x.id} onClick={()=>setSelectedExpense(x)}>
           <div className="client-cell"><div className="ops-avatar small"><Receipt size={14}/></div><div><strong>{x.category}{x.description?` — ${x.description}`:""}</strong><small>{formatDate(x.expense_date)}{linked?` · ${linked.booking_ref}`:""}</small></div></div>
           <strong className="money">{money(x.amount)}</strong>
-          <button className="ops-icon-btn" onClick={()=>removeExpense(x.id)} aria-label="Delete expense"><Trash2 size={14}/></button>
+          <button className="ops-icon-btn" onClick={(e)=>{e.stopPropagation();removeExpense(x.id);}} aria-label="Delete expense"><Trash2 size={14}/></button>
         </div>;
       })}</div> : <Empty icon={Receipt} title="No expenses logged" text="Add your first expense above."/>}
+      {selectedExpense && <ExpenseDrawer expense={selectedExpense} booking={bookings.find(b=>b.id===selectedExpense.booking_id)} onClose={()=>setSelectedExpense(null)} onDelete={()=>{removeExpense(selectedExpense.id);setSelectedExpense(null);}}/>}
     </section>
     <section className="ops-card"><div className="ops-card-head"><div><h2>Revenue summary</h2><p>Business view for the selected month.</p></div></div><div className="detail-grid"><Detail label="Service revenue" value={money(serviceRevenue)}/><Detail label="Laundry revenue" value={money(laundryRevenue)}/><Detail label="Transport revenue" value={money(transportRevenue)}/><Detail label="Administrative fee (40%)" value={money(adminFee)}/><Detail label="Gross payroll" value={money(grossPayroll)}/><Detail label="Employer contribution" value={money(employerSsnit)}/><Detail label="Net payroll paid" value={money(netPayroll)} strong/><Detail label="After admin fee + payroll" value={money(businessAfterAdminAndPayroll)}/><Detail label="Other expenses" value={money(totalExpenses)}/><Detail label="Net profit" value={money(netProfit)} strong/></div>
       <div className="accounting-note"><TrendingDown size={14}/> Net profit = revenue − admin fee − payroll cost − other expenses. This is the real bottom line for the month.</div>
@@ -518,6 +520,28 @@ function BookingDrawer({ booking:b, staff, onUpdate, onClose }) {
         <label className="drawer-field">Payment status<select value={b.payment_status} disabled={saving} onChange={e => change({payment_status:e.target.value})}>{PAYMENT_STATUSES.map(s=><option key={s}>{s}</option>)}</select></label>
       </div>
       <div className="drawer-actions"><a className="ops-secondary" href={`tel:${b.phone}`}><Activity /> Call client</a><a className="ops-primary" href={`https://wa.me/${String(b.phone||"").replace(/\D/g,"")}`} target="_blank" rel="noreferrer">WhatsApp</a></div>
+    </aside>
+  </div>;
+}
+
+function ExpenseDrawer({ expense: x, booking, onClose, onDelete }) {
+  return <div className="ops-drawer-wrap" onMouseDown={e => e.target === e.currentTarget && onClose()}>
+    <aside className="ops-drawer">
+      <div className="ops-drawer-head"><div><span className="ops-kicker">Expense</span><h2>{x.category}</h2></div><button className="ops-icon-btn" onClick={onClose}><X /></button></div>
+      <div className="drawer-section"><h3>Expense details</h3><div className="detail-grid">
+        <Detail label="Category" value={x.category}/>
+        <Detail label="Date" value={formatDate(x.expense_date)}/>
+        <Detail label="Amount" value={money(x.amount)} strong/>
+        <Detail label="Description" value={x.description || "—"}/>
+        <Detail label="Logged" value={x.created_at ? new Date(x.created_at).toLocaleString("en-GH") : "—"}/>
+      </div></div>
+      {booking && <div className="drawer-section"><h3>Linked booking</h3><div className="detail-grid">
+        <Detail label="Reference" value={booking.booking_ref}/>
+        <Detail label="Client" value={booking.name}/>
+        <Detail label="Service" value={booking.service_type}/>
+        <Detail label="Date" value={formatDate(booking.date)}/>
+      </div></div>}
+      <div className="drawer-actions"><button className="ops-secondary danger-text" onClick={onDelete}><Trash2 /> Delete expense</button></div>
     </aside>
   </div>;
 }
