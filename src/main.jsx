@@ -19,8 +19,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
-import Admin from "./pages/Admin";
-import Staff from "./pages/Staff";
+import Portal from "./pages/Portal";
 import "./styles/app.css";
 import "./styles/logo.css";
 const WA = import.meta.env.VITE_WHATSAPP_NUMBER || "233XXXXXXXXX";
@@ -475,8 +474,8 @@ function App() {
         <Route path="/book" element={<Book />} />
         <Route path="/check" element={<Check />} />
         <Route path="/rate" element={<Rate />} />
-        <Route path="/admin" element={<Admin />} />
-        <Route path="/staff" element={<Staff />} />
+        <Route path="/admin" element={<Portal />} />
+        <Route path="/staff" element={<Portal />} />
       </Routes>
       {!operations && <footer>
         <b>Tidyline Ghana</b>

@@ -46,7 +46,7 @@ function payrollFor(staff){
   return {basic,allowance,bonus,gross,ssnit,paye,net:gross-ssnit-paye,employer:basic*.13};
 }
 
-function StaffDashboard({session}){
+export function StaffDashboard({session}){
   const [me,setMe]=useState(null),[bookings,setBookings]=useState([]),[loading,setLoading]=useState(true),[toast,setToast]=useState(""),[error,setError]=useState("");
   useEffect(()=>{ document.title = "Staff Portal | Tidyline Ghana"; },[]);
   async function load(){
@@ -108,7 +108,7 @@ function StaffDashboard({session}){
       <div className="ops-sidebar-brand"><img className="ops-brand-logo" src="/Tidyline.png" alt="Tidyline" /><div><strong>Tidyline</strong><span>Staff Portal</span></div></div>
       <div className="ops-nav-title">My work</div>
       <div className="staff-side-person">{me?<><div className="ops-avatar large">{initials(me.name)}</div><strong>{me.name}</strong><span>{me.email || session.user.email}</span><span>{me.active?"Active team member":"Inactive"}</span></>:<><UserCheck/><strong>Loading profile…</strong></>}</div>
-      <div className="ops-sidebar-bottom"><a href="/admin" className="ops-staff-link"><CalendarCheck/> Admin login</a><button onClick={signOut}><LogOut/> Sign out</button></div>
+      <div className="ops-sidebar-bottom"><button onClick={signOut}><LogOut/> Sign out</button></div>
     </aside>
     <main className="ops-main">
       <header className="ops-header"><div className="ops-mobile-title"><img src="/Tidyline.png" alt="Tidyline" /><span>Tidyline</span></div><div className="ops-header-spacer"/><button className="ops-refresh" onClick={load}><RefreshCw/> Refresh</button><div className="ops-user"><div className="ops-avatar">{initials(me?.name || session.user.email)}</div><div><strong>{me?.name || session.user.email}</strong><span>Staff member</span></div></div></header>

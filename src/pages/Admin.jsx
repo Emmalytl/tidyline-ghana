@@ -80,7 +80,15 @@ function AdminLogin() {
     e.preventDefault();
     setBusy(true); setError("");
     const { error: signInError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-    if (signInError) setError(signInError.message);
+    if (signInError) { setError(signInError.message); setBusy(false); return; }
+    const { data: isStaff, error: roleError } = await supabase.rpc("current_user_is_staff");
+    if (roleError) { setError(roleError.message); setBusy(false); return; }
+    if (isStaff) {
+      await supabase.auth.signOut();
+      setError("This is a staff account — please sign in at the Staff portal instead, not here.");
+      setBusy(false);
+      return;
+    }
     setBusy(false);
   }
 
@@ -101,7 +109,7 @@ function AdminLogin() {
   );
 }
 
-function AdminDashboard({ session }) {
+export function AdminDashboard({ session }) {
   const [tab, setTab] = useState("dashboard");
   const [bookings, setBookings] = useState([]);
   const [staff, setStaff] = useState([]);
